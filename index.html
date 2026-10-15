@@ -1,0 +1,1827 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F5C55">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>隨手記帳</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F5C55'/%3E%3Cpath d='M10 7h12v18l-3-2-3 2-3-2-3 2zM13 12h6M13 16h6M13 20h3' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-screen phone ledger — entry pad is home; tabs at the bottom; everything else scrolls inside main. */
+[hidden] { display: none !important; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+:root {
+  --bg: #EEF2F0; --surface: #FFFFFF; --sunk: #E3E9E6; --line: #D3DCD8;
+  --fg: #16201D; --muted: #5C6A65;
+  --accent: #0F5C55; --accent-fg: #FFFFFF; --accent-soft: #D5E8E4;
+  --exp: #C23F36; --inc: #1F7F52; --xfer: #46618F; --warn: #A86A00;
+  --hero-a: #0F5C55; --hero-b: #1F8070; --hero-fg: #FFFFFF;
+  --ring-in: #3E7CC4; --ring-out: #EE8A3C;
+  --font-ui: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --r: 10px;
+}
+:root[lang="zh-CN"] { --font-ui: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+:root[lang="en"] { --font-ui: "Noto Sans TC", system-ui, -apple-system, "Segoe UI", sans-serif; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1312; --surface: #171F1D; --sunk: #1F2926; --line: #2B3734;
+  --fg: #E4ECE9; --muted: #92A29C;
+  --accent: #4DB5A6; --accent-fg: #03201C; --accent-soft: #1C3A36;
+  --exp: #F07A70; --inc: #5BC98E; --xfer: #8FA7D8; --warn: #E3A840;
+  --hero-a: #22665C; --hero-b: #143F3A; --hero-fg: #EAF4F1;
+  --ring-in: #6FA3E0; --ring-out: #F5A05E; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0E1312; --surface: #171F1D; --sunk: #1F2926; --line: #2B3734;
+  --fg: #E4ECE9; --muted: #92A29C;
+  --accent: #4DB5A6; --accent-fg: #03201C; --accent-soft: #1C3A36;
+  --exp: #F07A70; --inc: #5BC98E; --xfer: #8FA7D8; --warn: #E3A840;
+  --hero-a: #22665C; --hero-b: #143F3A; --hero-fg: #EAF4F1;
+  --ring-in: #6FA3E0; --ring-out: #F5A05E; color-scheme: dark }
+
+html { box-sizing: border-box; height: 100%; }
+*, *::before, *::after { box-sizing: inherit; }
+body { height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 15px; line-height: 1.5; -webkit-tap-highlight-color: transparent; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.exp { color: var(--exp); } .inc { color: var(--inc); } .xfer { color: var(--xfer); }
+.muted { color: var(--muted); }
+
+#app { height: 100%; max-width: 540px; margin: 0 auto; display: flex; flex-direction: column; }
+header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 6px; }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: .02em; }
+.sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); background: none; border: 0; padding: 4px 0; }
+.sync i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.sync[data-s="ok"] i { background: var(--inc); }
+.sync[data-s="busy"] i { background: var(--warn); }
+.sync[data-s="err"] i { background: var(--exp); }
+.sync[data-s="err"] { color: var(--exp); }
+main { flex: 1; min-height: 0; overflow: auto; padding-inline: 16px; padding-block: 4px 16px; }
+nav.tabs { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: var(--surface); }
+nav.tabs button { background: none; border: 0; padding: 9px 0 10px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+nav.tabs button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+nav.tabs button[aria-current="page"] { color: var(--accent); font-weight: 700; }
+
+/* segmented */
+.seg { display: inline-flex; background: var(--sunk); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: none; padding: 5px 14px; border-radius: 999px; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); font-weight: 700; box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.seg button[aria-pressed="true"][data-t="expense"] { color: var(--exp); }
+.seg button[aria-pressed="true"][data-t="income"] { color: var(--inc); }
+.seg button[aria-pressed="true"][data-t="transfer"] { color: var(--xfer); }
+
+/* entry */
+.entry { height: 100%; display: flex; flex-direction: column; gap: 7px; }
+.entry-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.today { font-size: 12px; color: var(--muted); }
+.editbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; background: var(--accent-soft); border-radius: var(--r); padding: 6px 10px; font-size: 13px; }
+.editbar .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.budstrip { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.budstrip .bud-top { display: flex; justify-content: space-between; gap: 8px; }
+.track { height: 5px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.track i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.track i.warn { background: var(--warn); }
+.track i.over { background: var(--exp); }
+.amount { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 14px; text-align: right; min-height: 60px; display: flex; flex-direction: column; justify-content: center; }
+.amount .expr { font-size: 12px; color: var(--muted); min-height: 16px; }
+.amount .val { font-size: 32px; font-weight: 600; line-height: 1.1; letter-spacing: -.01em; }
+.amount .val small { font-size: 14px; margin-right: 6px; color: var(--muted); font-weight: 500; }
+.amount.shake { animation: shake .3s; border-color: var(--exp); }
+@keyframes shake { 25% { transform: translateX(-5px) } 75% { transform: translateX(5px) } }
+.extra { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.extra input { width: 110px; min-height: 34px; padding: 4px 8px; }
+.cats { flex: 1; min-height: 72px; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; align-content: start; }
+.cat { border: 1px solid transparent; background: none; border-radius: var(--r); padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; text-align: center; line-height: 1.2; }
+.badge { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 15px; font-weight: 700; flex: none; }
+.cat[aria-pressed="true"] { border-color: var(--c); background: var(--surface); color: var(--fg); font-weight: 700; }
+.xfer-box { flex: 1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; align-content: center; }
+.xfer-box label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+.arrow { font-size: 20px; color: var(--xfer); padding-top: 18px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fields .note { min-width: 0; }
+.fields .wide { grid-column: 1 / -1; }
+.field { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; min-height: 40px; }
+.datebox { display: flex; gap: 4px; }
+.datebox input { flex: 1; min-width: 0; }
+.tagchips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.chip { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.pad button { border: 0; border-radius: var(--r); background: var(--surface); height: clamp(40px, 6.2vh, 56px); font-family: var(--font-num); font-size: 20px; font-weight: 500; box-shadow: 0 1px 0 var(--line); }
+.pad button:active { background: var(--sunk); }
+.pad .op { background: var(--sunk); font-size: 18px; }
+.pad .save { background: var(--accent); color: var(--accent-fg); font-family: var(--font-ui); font-size: 17px; font-weight: 700; }
+.pad .save:disabled { opacity: .5; cursor: wait; }
+
+/* generic */
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-size: 14px; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
+.btn.danger { color: var(--exp); border-color: var(--exp); }
+.btn.sm { padding: 3px 9px; font-size: 13px; }
+.btn:disabled { opacity: .45; }
+h2 { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .06em; margin: 18px 0 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.monthbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 10px; }
+.monthbar strong { font-size: 17px; }
+.iconbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; width: 36px; height: 36px; font-size: 18px; line-height: 1; flex: none; }
+.totals { display: grid; grid-template-columns: repeat(3, 1fr); padding: 10px 4px; }
+.totals div { display: grid; text-align: center; gap: 2px; min-width: 0; }
+.totals span { font-size: 12px; color: var(--muted); }
+.totals b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.search { margin: 10px 0 4px; }
+.day { margin-top: 14px; }
+.day-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); padding: 0 4px 4px; }
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--line); width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; }
+.rows li:first-child .row { border-top: 0; }
+.row .mid { flex: 1; min-width: 0; display: grid; }
+.row .mid b { font-weight: 500; }
+.row .mid small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .mid small em { font-style: normal; color: var(--accent); }
+.row .amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; text-align: right; display: grid; }
+.row .amt small { font-size: 11px; color: var(--muted); font-weight: 500; }
+.empty { text-align: center; color: var(--muted); padding: 36px 12px; font-size: 14px; }
+.legend { list-style: none; padding: 0; margin: 0; }
+.legend li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.legend li:first-child { border-top: 0; }
+.legend .bar { height: 4px; border-radius: 2px; background: var(--c); }
+.legend .mid { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.legend .mid div { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.chart { padding: 12px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { fill: var(--muted); font-size: 10px; font-family: var(--font-num); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart-key { display: flex; gap: 14px; font-size: 12px; color: var(--muted); padding: 0 12px 10px; }
+.chart-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.budlist { display: grid; }
+.bud { display: grid; gap: 4px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.bud:first-child { border-top: 0; }
+.bud .bud-top { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.bud small { font-size: 12px; color: var(--muted); }
+.taglist button { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 12px; text-align: left; }
+.taglist button:first-child { border-top: 0; }
+.taglist b { color: var(--accent); font-weight: 600; }
+.networth { padding: 16px; display: grid; gap: 2px; }
+.networth span { font-size: 12px; color: var(--muted); }
+.networth b { font-family: var(--font-num); font-size: 28px; font-weight: 600; }
+.acct { padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.acct:first-child { border-top: 0; }
+.acct-line { display: flex; align-items: center; gap: 10px; }
+.acct-line .mid { flex: 1; min-width: 0; display: grid; }
+.acct-line small { font-size: 12px; color: var(--muted); }
+.acct-line .bal { font-family: var(--font-num); font-weight: 600; text-align: right; display: grid; }
+.acct-line .bal small { font-weight: 500; }
+.editor { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.editor .full { grid-column: 1 / -1; }
+.editor label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.editor .actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.catrow { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.catrow:first-child { border-top: 0; }
+.catrow input.field { flex: 1; min-width: 0; min-height: 34px; padding: 4px 8px; }
+.catrow input.budin { flex: 0 0 96px; }
+.catrow .badge { width: 28px; height: 28px; font-size: 13px; border: 0; cursor: pointer; }
+.catrow .mid { flex: 1; min-width: 0; display: grid; }
+.catrow .mid small { font-size: 12px; color: var(--muted); }
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; border-top: 1px solid var(--line); padding: 14px 12px 14px 16px; text-align: left; }
+.menu button:first-child { border-top: 0; }
+.menu .mid { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.menu .mid b { font-weight: 500; font-size: 15px; }
+.menu .mid small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .mid small.exp { color: var(--exp); }
+.menu .chev { color: var(--muted); font-size: 22px; line-height: 1; }
+.subhead { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
+.subhead strong { font-size: 17px; }
+.langs { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px; }
+.langs button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 16px; font-size: 14px; }
+.langs button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.addrow { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.addrow input { flex: 1; min-width: 120px; }
+.addrow select { width: auto; max-width: 100%; }
+.section-body { padding: 12px; display: grid; gap: 10px; }
+.section-body p { margin: 0; font-size: 14px; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+textarea.field { min-height: 120px; font-family: var(--font-num); font-size: 12px; }
+.notice { font-size: 13px; border-radius: var(--r); padding: 8px 12px; background: var(--accent-soft); }
+.notice.warn { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); }
+.hint { font-size: 12px; color: var(--muted); margin: 8px 4px 0; }
+.toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 10px 9px 16px; border-radius: 18px; font-size: 14px; display: flex; align-items: center; gap: 10px; width: max-content; max-width: calc(100% - 32px); box-shadow: 0 4px 16px rgb(0 0 0 / .25); z-index: 10; }
+.toast .warnline { display: block; color: var(--warn); font-weight: 700; }
+.toast button { background: none; border: 1px solid currentColor; color: inherit; border-radius: 999px; padding: 2px 10px; font-size: 13px; flex: none; }
+/* richer surfaces: soft type tints, icon badges, gradient hero */
+.brand { display: inline-flex; align-items: center; gap: 8px; }
+.logo { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--hero-a), var(--hero-b)); display: grid; place-items: center; color: var(--hero-fg); }
+.logo svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ico { width: 56%; height: 56%; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ico.dots { stroke-width: 3.2; }
+.card { box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
+nav.tabs button svg { box-sizing: content-box; padding: 3px 14px; border-radius: 999px; transition: background .15s; }
+nav.tabs button[aria-current="page"] svg { background: var(--accent-soft); }
+.amount { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; --tc: var(--exp); background: color-mix(in srgb, var(--tc) 7%, var(--surface)); border-color: color-mix(in srgb, var(--tc) 30%, var(--line)); transition: background .2s, border-color .2s; }
+.amount[data-t="income"] { --tc: var(--inc); }
+.amount[data-t="transfer"] { --tc: var(--xfer); }
+.amt-cat { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--fg); text-align: left; }
+.amt-cat > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amt-cat .badge { width: 32px; height: 32px; }
+.amt-num { display: flex; flex-direction: column; min-width: 0; text-align: right; }
+.cat .badge { background: color-mix(in srgb, var(--c) 15%, var(--surface)); color: var(--c); transition: background .15s, color .15s; }
+.cat[aria-pressed="true"] { background: color-mix(in srgb, var(--c) 10%, var(--surface)); border-color: color-mix(in srgb, var(--c) 45%, transparent); }
+.cat[aria-pressed="true"] .badge { background: var(--c); color: #fff; }
+.pad .save { background: linear-gradient(135deg, var(--hero-a), var(--hero-b)); color: var(--hero-fg); }
+.totals { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; }
+.totals .tile { --tc: var(--accent); background: color-mix(in srgb, var(--tc) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--tc) 22%, var(--line)); border-radius: var(--r); padding: 10px 6px; justify-items: center; }
+.totals .tile.inc { --tc: var(--inc); }
+.totals .tile.exp { --tc: var(--exp); }
+.totals .tile span { display: inline-flex; align-items: center; gap: 5px; }
+.totals .tile span i { width: 7px; height: 7px; border-radius: 50%; background: var(--tc); }
+.totals .tile b { color: var(--tc); }
+.totals .tile.net b { color: var(--fg); }
+.networth { position: relative; overflow: hidden; background: linear-gradient(135deg, var(--hero-a), var(--hero-b)); border: 0; padding: 18px 16px 20px; }
+.networth::after { content: ""; position: absolute; right: -46px; top: -56px; width: 180px; height: 180px; border-radius: 50%; border: 28px solid rgb(255 255 255 / .08); pointer-events: none; }
+.networth::before { content: ""; position: absolute; right: 60px; bottom: -70px; width: 120px; height: 120px; border-radius: 50%; background: rgb(255 255 255 / .06); pointer-events: none; }
+.networth span, .networth b { position: relative; color: var(--hero-fg); }
+.networth span { opacity: .82; }
+.networth b.exp { color: var(--hero-fg); }
+.menu .mi { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--c) 15%, var(--surface)); color: var(--c); }
+.subhead .mi { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 15%, var(--surface)); color: var(--c); }
+.row, .menu button, .taglist button { transition: background .12s; }
+.row:hover, .menu button:hover, .taglist button:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.day-head span:first-child { font-weight: 700; color: var(--fg); }
+.empty .ico { width: 40px; height: 40px; color: var(--line); display: block; margin: 0 auto 8px; }
+.sumring { display: flex; align-items: center; justify-content: center; padding-block: 10px 6px; }
+.ringbox { position: relative; width: 190px; max-width: 70%; flex: none; }
+.legend li { padding: 0; }
+.lg-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; background: none; border: 0; text-align: left; transition: background .12s; }
+.lg-btn:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.lg-btn .chev { color: var(--muted); font-size: 18px; line-height: 1; }
+/* category detail sheet */
+.sheet { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+.sheet-back { position: absolute; inset: 0; background: rgb(0 0 0 / .42); animation: fadein .18s ease-out; }
+.sheet-panel { position: relative; width: 100%; max-width: 540px; max-height: 86%; overflow: auto; background: var(--bg); border-radius: 18px 18px 0 0; padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -8px 30px rgb(0 0 0 / .2); animation: sheetup .22s ease-out; }
+.sheet-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 2px auto 10px; }
+.sh-head { display: flex; align-items: center; gap: 12px; }
+.sh-head .badge { width: 48px; height: 48px; font-size: 20px; }
+.sh-head .mid { flex: 1; min-width: 0; display: grid; }
+.sh-head h3 { margin: 0; font-size: 18px; }
+.sh-head small { color: var(--muted); font-size: 13px; }
+.sh-total { font-family: var(--font-num); font-size: 30px; font-weight: 600; margin: 12px 0 2px; }
+.sh-diff { font-size: 13px; color: var(--muted); }
+.sh-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.sh-stats div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; display: grid; gap: 2px; min-width: 0; }
+.sh-stats span { font-size: 12px; color: var(--muted); }
+.sh-stats b { font-family: var(--font-num); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+@keyframes sheetup { from { transform: translateY(40px); opacity: 0; } }
+@keyframes fadein { from { opacity: 0; } }
+.rangebar { display: grid; gap: 8px; justify-items: center; margin-bottom: 4px; }
+.rangeseg button { padding: 5px 12px; }
+.rangedates { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 360px; }
+.rangedates input { flex: 1; min-width: 0; min-height: 36px; padding: 4px 8px; }
+.rangedates span { color: var(--muted); }
+/* sign-in screen */
+.login { min-height: 100%; display: grid; place-items: center; padding: 32px 16px; }
+.login-card { width: 100%; max-width: 380px; display: grid; gap: 14px; justify-items: stretch; text-align: center; }
+.login-card h1 { margin: 0; font-size: 24px; }
+.login-card p { margin: 0; }
+.logo.big { width: 64px; height: 64px; border-radius: 18px; justify-self: center; box-shadow: 0 6px 20px rgb(15 92 85 / .25); }
+.logo.big svg { width: 36px; height: 36px; }
+.login-form { display: grid; gap: 10px; }
+.login-form .field { min-height: 46px; font-size: 16px; }
+.btn.big { min-height: 46px; font-size: 15px; border-radius: var(--r); }
+.gbtn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; font-weight: 500; }
+.gbtn .g { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; color: #fff; background: conic-gradient(#EA4335 0 25%, #FBBC05 0 50%, #34A853 0 75%, #4285F4 0); }
+.login-msg { font-size: 13px; text-align: left; border-radius: var(--r); padding: 10px 12px; background: var(--accent-soft); }
+.login-msg.err { background: color-mix(in srgb, var(--exp) 14%, var(--surface)); color: var(--exp); }
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.login-langs { justify-content: center; padding: 4px 0 0; }
+.login-langs button { padding: 4px 12px; font-size: 13px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.piebox { display: flex; justify-content: center; padding-block: 6px 4px; }
+.piebox svg { display: block; width: 210px; max-width: 70%; height: auto; }
+.topright { display: inline-flex; align-items: center; gap: 6px; }
+.themebtn { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--fg); display: grid; place-items: center; padding: 0; }
+.themebtn .ico { width: 17px; height: 17px; }
+.themebtn:hover { border-color: var(--accent); color: var(--accent); }
+.rc-link { display: inline-flex; align-items: center; justify-content: center; gap: 5px; background: none; border: 0; padding: 2px 8px; border-radius: 999px; font-size: 15px; color: var(--muted); }
+.rc-link .ico { width: 18px; height: 18px; }
+.rc-link:hover { color: var(--accent); background: var(--accent-soft); }
+.ringbox svg { display: block; width: 100%; height: auto; }
+.ringbox .rc { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 1px; }
+.ringbox .rc span { font-size: 12px; color: var(--muted); }
+.ringbox .rc b { font-weight: 600; }
+.ringlegend { list-style: none; margin: 0; padding: 0; flex: 0 1 auto; min-width: 0; display: grid; gap: 10px; }
+.ringlegend li { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px; font-size: 13px; color: var(--muted); }
+.ringlegend li i { width: 9px; height: 9px; border-radius: 50%; grid-row: span 2; align-self: start; margin-top: 5px; }
+.ringlegend li b { grid-column: 2; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.ringlegend li.note { display: block; font-size: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.ringlegend li.note.exp { color: var(--exp); font-weight: 600; }
+/* category grid: 4 per row on phones, 5 on wider screens, larger icons */
+.cats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 8px; }
+@media (min-width: 440px) { .cats { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.cat { padding: 8px 2px 6px; gap: 5px; font-size: 13px; }
+.cat .badge { width: 46px; height: 46px; font-size: 18px; }
+.cat .badge .ico { width: 52%; height: 52%; }
+.cat.add .badge { background: none; border: 1.5px dashed var(--line); color: var(--muted); }
+.cat.add:hover .badge { border-color: var(--accent); color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .amount.shake { animation: none; } * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div id="app" hidden>
+  <header class="top">
+    <span class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/></svg></span><span id="brand">隨手記帳</span></span>
+    <span class="topright"><button class="sync" id="sync" data-s="busy" type="button"><i></i><span>連線中</span></button><button class="themebtn" id="themebtn" type="button"></button></span>
+  </header>
+  <main id="main"></main>
+  <nav class="tabs" id="tabs">
+    <button data-v="add" type="button"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>記一筆</span></button>
+    <button data-v="list" type="button"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg><span>明細</span></button>
+    <button data-v="stats" type="button"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span>統計</span></button>
+    <button data-v="accounts" type="button"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg><span>帳戶</span></button>
+    <button data-v="settings" type="button"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>設定</span></button>
+  </nav>
+</div>
+<div id="toast" class="toast" hidden></div>
+<div id="sheet" class="sheet" hidden><div class="sheet-back" data-close="1"></div><div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title" id="sheet-panel"></div></div>
+<div id="login" class="login" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(() => {
+'use strict';
+
+// ---------- i18n ----------
+// Each row: [繁體中文 (also the lookup key), English, 简体中文]
+const LANGS = { 'zh-TW': '繁體中文', 'zh-CN': '简体中文', en: 'English' };
+const LOCALE = { 'zh-TW': 'zh-TW', 'zh-CN': 'zh-CN', en: 'en-US' };
+const DICT_ROWS = [
+  ['隨手記帳', 'Pocket Ledger', '随手记账'],
+  ['連線中', 'Connecting', '连接中'],
+  ['僅存本機', 'This device only', '仅存本机'],
+  ['同步中', 'Syncing', '同步中'],
+  ['未同步，點此重試', 'Not synced, tap to retry', '未同步，点此重试'],
+  ['雲端已同步', 'Synced', '云端已同步'],
+  ['記一筆', 'Add', '记一笔'], ['明細', 'Records', '明细'], ['統計', 'Stats', '统计'], ['帳戶', 'Accounts', '账户'], ['設定', 'Settings', '设置'],
+  ['支出', 'Expense', '支出'], ['收入', 'Income', '收入'], ['轉帳', 'Transfer', '转账'],
+  ['更新', 'Update', '更新'], ['儲存', 'Save', '保存'], ['載入中', 'Loading', '加载中'],
+  ['已刪除帳戶', 'Deleted account', '已删除账户'], ['未分類', 'Uncategorized', '未分类'],
+  ['現金', 'Cash', '现金'], ['銀行', 'Bank', '银行'], ['信用卡', 'Credit card', '信用卡'], ['電子支付', 'E-wallet', '电子支付'], ['其他', 'Other', '其他'],
+  ['每月', 'Monthly', '每月'], ['每週', 'Weekly', '每周'], ['每年', 'Yearly', '每年'],
+  ['每週{w}', 'Every {w}', '每周{w}'], ['每年 {m}/{d}', 'Yearly on {m}/{d}', '每年 {m}/{d}'], ['每月 {d} 日', 'Monthly on day {d}', '每月 {d} 日'],
+  ['雲端空間已滿，請匯出備份後刪除舊資料', 'Cloud storage is full. Export a backup, then delete old records.', '云端空间已满，请导出备份后删除旧数据'],
+  ['已自動記入 {n} 筆週期帳目', 'Added {n} recurring entries', '已自动记入 {n} 笔周期账目'],
+  ['{c}預算已超支 {v}', '{c} budget over by {v}', '{c}预算已超支 {v}'],
+  ['本月總預算已超支 {v}', 'Monthly budget over by {v}', '本月总预算已超支 {v}'],
+  ['{c}預算已用 {p}%', '{c} budget {p}% used', '{c}预算已用 {p}%'],
+  ['本月預算已用 {p}%', 'Monthly budget {p}% used', '本月预算已用 {p}%'],
+  ['先輸入金額', 'Enter an amount first', '先输入金额'],
+  ['轉出和轉入要選不同帳戶', 'Pick two different accounts', '转出和转入要选不同账户'],
+  ['選一個分類', 'Pick a category', '选一个分类'],
+  ['先到「帳戶」新增一個帳戶', 'Add an account under Accounts first', '先到「账户」新增一个账户'],
+  ['請輸入 {c} 對 {b} 的匯率', 'Enter the {c} → {b} exchange rate', '请输入 {c} 对 {b} 的汇率'],
+  ['請輸入轉入的 {c} 金額', 'Enter the amount received in {c}', '请输入转入的 {c} 金额'],
+  ['已更新 {w} {a}', 'Updated {w} {a}', '已更新 {w} {a}'],
+  ['已記下 {t} {a} · {w}', 'Saved {t} {a} · {w}', '已记下 {t} {a} · {w}'],
+  ['復原', 'Undo', '撤销'], ['已復原', 'Undone', '已撤销'],
+  ['已刪除這筆記錄', 'Record deleted', '已删除这笔记录'],
+  ['已設為{f}固定記帳，下次 {d}', 'Now repeats: {f}. Next on {d}', '已设为{f}固定记账，下次 {d}'],
+  ['轉出帳戶', 'From account', '转出账户'], ['轉入帳戶', 'To account', '转入账户'], ['分類', 'Category', '分类'],
+  ['匯率 1 {c} =', 'Rate: 1 {c} =', '汇率 1 {c} ='], ['手動輸入', 'Enter rate', '手动输入'],
+  ['轉入金額 ({c})', 'Amount received ({c})', '转入金额 ({c})'], ['金額', 'Amount', '金额'],
+  ['今天 {n} 筆 · 支出 {v}', 'Today: {n} · spent {v}', '今天 {n} 笔 · 支出 {v}'],
+  ['連續記帳 {n} 天', '{n}-day streak', '连续记账 {n} 天'],
+  ['本月支出', 'Spent this month', '本月支出'], ['{c}預算', '{c} budget', '{c}预算'], ['本月預算', 'Monthly budget', '本月预算'],
+  ['超支 {v}', 'Over by {v}', '超支 {v}'], ['剩 {v}', '{v} left', '剩 {v}'],
+  ['常用標籤', 'Recent tags', '常用标签'],
+  ['正在編輯一筆記錄', 'Editing a record', '正在编辑一笔记录'], ['設為每月固定', 'Repeat monthly', '设为每月固定'],
+  ['確定刪除', 'Confirm delete', '确定删除'], ['刪除', 'Delete', '删除'], ['取消', 'Cancel', '取消'], ['確定', 'Confirm', '确定'], ['仍要刪除', 'Delete anyway', '仍要删除'],
+  ['類型', 'Type', '类型'], ['日期', 'Date', '日期'], ['帳戶', 'Accounts', '账户'],
+  ['備註，可加 #標籤（例如 #日本旅遊）', 'Note — add #tags (e.g. #JapanTrip)', '备注，可加 #标签（例如 #日本旅游）'],
+  ['刪除一位', 'Backspace', '删除一位'], ['加', 'Plus', '加'], ['減', 'Minus', '减'],
+  ['固定', 'Recurring', '固定'], ['收 {v}', 'In {v}', '收 {v}'], ['支 {v}', 'Out {v}', '支 {v}'],
+  ['上個月', 'Previous month', '上个月'], ['下個月', 'Next month', '下个月'], ['結餘', 'Net', '结余'],
+  ['今天', 'Today', '今天'], ['昨天', 'Yesterday', '昨天'],
+  ['在所有月份找到 {n} 筆', '{n} matches across all months', '在所有月份找到 {n} 笔'],
+  ['沒有符合的記錄', 'No matching records', '没有符合的记录'],
+  ['這個月還沒有記錄。<br>到「記一筆」輸入金額、選分類，按儲存即可。', 'No records this month.<br>Go to Add, enter an amount, pick a category and tap Save.', '这个月还没有记录。<br>到「记一笔」输入金额、选分类，按保存即可。'],
+  ['搜尋備註、分類、帳戶、金額或 #標籤', 'Search notes, categories, accounts, amounts or #tags', '搜索备注、分类、账户、金额或 #标签'],
+  ['分類占比圓餅圖', 'Share by category', '分类占比饼图'], ['{t}合計', 'Total {t}', '{t}合计'],
+  ['{d}日 {v}', 'Day {d}: {v}', '{d}日 {v}'], ['每日{t}', 'Daily {t}', '每日{t}'],
+  ['近 12 個月收支趨勢', 'Income and expense, last 12 months', '近 12 个月收支趋势'], ['近 12 個月趨勢', '12-month trend', '近 12 个月趋势'],
+  ['剩 {v}，已用 {p}%', '{v} left, {p}% used', '剩 {v}，已用 {p}%'],
+  ['{m}沒有{t}記錄', 'No {t} records in {m}', '{m}没有{t}记录'],
+  ['預算', 'Budget', '预算'], ['本月總預算', 'Monthly total', '本月总预算'],
+  ['還沒有設定預算。到「設定 → 預算」填每月總額或分類上限，超支時記帳畫面會提醒你。', 'No budget yet. Set a monthly total or category limits under Settings → Budget, and you will be warned when you overspend.', '还没有设置预算。到「设置 → 预算」填每月总额或分类上限，超支时记账画面会提醒你。'],
+  ['標籤（全部期間）', 'Tags (all time)', '标签（全部期间）'], ['{n} 筆', '{n} records', '{n} 笔'],
+  ['統計類型', 'Stats type', '统计类型'], ['分類占比', 'By category', '分类占比'],
+  ['金額以 {b} 計，外幣用記帳當時的匯率換算。轉帳只在帳戶之間移動金額，不計入收入或支出。', 'Amounts are in {b}; foreign currency uses the rate at the time it was recorded. Transfers move money between accounts and are not counted as income or expense.', '金额以 {b} 计，外币用记账当时的汇率换算。转账只在账户之间移动金额，不计入收入或支出。'],
+  ['名稱', 'Name', '名称'], ['幣別', 'Currency', '币种'], ['期初餘額（{c}）', 'Opening balance ({c})', '期初余额（{c}）'],
+  ['上移', 'Move up', '上移'], ['下移', 'Move down', '下移'], ['看明細', 'View records', '看明细'],
+  ['有 {n} 筆記錄，無法刪除或改幣別', 'Has {n} records; can’t delete or change currency', '有 {n} 笔记录，无法删除或改币种'],
+  ['信用卡的期初餘額填尚未繳的卡費，用負數，例如 -3500。', 'For a credit card, enter the unpaid balance as a negative number, e.g. -3500.', '信用卡的期初余额填尚未缴的卡费，用负数，例如 -3500。'],
+  ['收起', 'Close', '收起'], ['編輯', 'Edit', '编辑'],
+  ['淨資產（所有帳戶換算 {b} 加總）', 'Net worth (all accounts in {b})', '净资产（所有账户换算 {b} 加总）'],
+  ['未計入 {c}：請到「設定 → 幣別與匯率」填匯率', '{c} not included: set its rate under Settings → Currency', '未计入 {c}：请到「设置 → 币种与汇率」填汇率'],
+  ['還沒有帳戶', 'No accounts yet', '还没有账户'],
+  ['新增帳戶，例如：郵局、日幣現金', 'New account, e.g. Savings, Yen cash', '新增账户，例如：支付宝、日元现金'],
+  ['新增', 'Add', '新增'],
+  ['餘額 = 期初餘額 + 收入 − 支出 ± 轉帳，以帳戶本身的幣別計。提款、繳卡費、儲值、換匯請用「轉帳」記錄。', 'Balance = opening balance + income − expense ± transfers, in the account’s own currency. Record withdrawals, card payments, top-ups and currency exchange as Transfers.', '余额 = 期初余额 + 收入 − 支出 ± 转账，以账户本身的币种计。提款、还信用卡、充值、换汇请用「转账」记录。'],
+  ['帳戶名稱不能空白', 'Account name can’t be empty', '账户名称不能为空'], ['帳戶已更新', 'Account updated', '账户已更新'], ['帳戶已刪除', 'Account deleted', '账户已删除'],
+  ['輸入帳戶名稱', 'Enter an account name', '输入账户名称'],
+  ['已新增「{n}」，記得到設定填 {c} 匯率', 'Added “{n}”. Set the {c} rate in Settings.', '已新增「{n}」，记得到设置填 {c} 汇率'],
+  ['已新增帳戶「{n}」', 'Added account “{n}”', '已新增账户「{n}」'],
+  ['輸入分類名稱', 'Enter a category name', '输入分类名称'], ['已新增分類「{n}」', 'Added category “{n}”', '已新增分类「{n}」'],
+  ['至少要保留一個分類', 'Keep at least one category', '至少要保留一个分类'], ['分類已刪除', 'Category deleted', '分类已删除'],
+  ['已恢復，下次 {d}', 'Resumed. Next on {d}', '已恢复，下次 {d}'], ['已暫停', 'Paused', '已暂停'],
+  ['已刪除週期帳目，過去記入的記錄保留', 'Recurring entry deleted; past records are kept', '已删除周期账目，过去记入的记录保留'],
+  ['輸入金額', 'Enter an amount', '输入金额'],
+  ['跨幣別轉帳請先填好兩邊的匯率', 'Set exchange rates for both currencies first', '跨币种转账请先填好两边的汇率'],
+  ['請先在下方填 {c} 匯率', 'Set the {c} rate below first', '请先在下方填 {c} 汇率'],
+  ['已新增：{f}，{x}', 'Added: {f}. {x}', '已新增：{f}，{x}'], ['下次 {d}', 'Next on {d}', '下次 {d}'], ['已補記到期的帳目', 'Due entries were added', '已补记到期的账目'],
+  ['請先處理已開啟的下載視窗', 'Finish the open download prompt first', '请先处理已打开的下载窗口'],
+  ['備份已匯出', 'Backup exported', '备份已导出'], ['明細已匯出', 'Records exported', '明细已导出'],
+  ['這不是隨手記帳的備份檔', 'This isn’t a Pocket Ledger backup file', '这不是随手记账的备份文件'],
+  ['已匯入 {n} 筆記錄', 'Imported {n} records', '已导入 {n} 笔记录'],
+  ['已複製', 'Copied', '已复制'], ['已全選，請按複製', 'Selected — copy it now', '已全选，请按复制'],
+  ['資料存在你的 Claude 帳號裡，只有你看得到。用同一個帳號在手機或電腦打開這頁，資料會自動同步。', 'Your data is stored in your Claude account and only you can see it. Open this page with the same account on your phone or computer and it syncs automatically.', '数据存在你的 Claude 账号里，只有你看得到。用同一个账号在手机或电脑打开这页，数据会自动同步。'],
+  ['目前無法連上雲端，資料只存在這台裝置的瀏覽器。清除瀏覽資料就會消失，請常匯出備份。', 'Can’t reach the cloud. Data is only in this device’s browser and is lost if you clear browsing data — export backups often.', '目前无法连上云端，数据只存在这台设备的浏览器。清除浏览数据就会消失，请常导出备份。'],
+  ['正在連線…', 'Connecting…', '正在连接…'],
+  ['這個分類已有記錄，刪除後那些記錄會顯示為「未分類」，金額不受影響。', 'This category has records. They will show as Uncategorized; amounts are unaffected.', '这个分类已有记录，删除后那些记录会显示为「未分类」，金额不受影响。'],
+  ['本月 {v}', 'This month {v}', '本月 {v}'], ['不限', 'No limit', '不限'], ['{c}每月預算', '{c} monthly budget', '{c}每月预算'],
+  ['下次 {d}', 'Next on {d}', '下次 {d}'],
+  ['週期帳目類型', 'Recurring entry type', '周期账目类型'], ['頻率', 'Frequency', '频率'], ['第一次日期', 'First date', '首次日期'],
+  ['名稱 / 備註', 'Name / note', '名称 / 备注'], ['薪水', 'Salary', '工资'], ['繳卡費', 'Card payment', '还信用卡'], ['房租、Netflix', 'Rent, Netflix', '房租、Netflix'], ['可加 #標籤', 'add #tags', '可加 #标签'],
+  ['新增週期帳目', 'Add recurring entry', '新增周期账目'],
+  ['每次打開 app 時，會自動補記到期的帳目（包含今天）。之後刪掉自動記入的某一筆，不會再被補回來。', 'Each time you open the app, entries that are due (including today) are added. If you delete one that was added automatically, it won’t come back.', '每次打开 app 时，会自动补记到期的账目（包含今天）。之后删掉自动记入的某一笔，不会再被补回来。'],
+  ['還沒填匯率', 'Rate not set', '还没填汇率'], ['匯率', 'Rate', '汇率'], ['{c} 匯率', '{c} rate', '{c} 汇率'],
+  ['每月總預算', 'Monthly total budget', '每月总预算'], ['本月已花 {v}', 'Spent this month: {v}', '本月已花 {v}'],
+  ['留空代表不設上限。記帳時用到 80% 和超支都會提醒，記帳畫面上方也會顯示剩餘額度。', 'Leave blank for no limit. You’ll be warned at 80% and when you go over; the Add screen shows what’s left.', '留空代表不设上限。记账时用到 80% 和超支都会提醒，记账画面上方也会显示剩余额度。'],
+  ['週期性帳目', 'Recurring entries', '周期性账目'],
+  ['房租、訂閱、薪水這類固定收支設定一次，就會自動入帳。', 'Set up rent, subscriptions or salary once and they are added automatically.', '房租、订阅、工资这类固定收支设置一次，就会自动入账。'],
+  ['也可以在明細點開任一筆記錄，按「設為每月固定」。', 'You can also open any record in Records and tap “Repeat monthly”.', '也可以在明细点开任一笔记录，按「设为每月固定」。'],
+  ['暫停', 'Pause', '暂停'], ['恢復', 'Resume', '恢复'],
+  ['分類類型', 'Category type', '分类类型'], ['{t}分類', '{t} categories', '{t}分类'], ['新增{t}分類', 'New {t} category', '新增{t}分类'],
+  ['換顏色', 'Change color', '换颜色'], ['分類名稱', 'Category name', '分类名称'],
+  ['點圓圈換顏色，直接改名稱，用箭頭調整在記帳畫面的順序。', 'Tap the circle to change color, edit names in place, and use the arrows to reorder.', '点圆圈换颜色，直接改名称，用箭头调整在记账画面的顺序。'],
+  ['幣別與匯率', 'Currency and rates', '币种与汇率'], ['主要幣別', 'Main currency', '主要币种'],
+  ['統計、預算、淨資產都用它計算', 'Used for stats, budgets and net worth', '统计、预算、净资产都用它计算'],
+  ['；已有記錄，不能再更改', '; can’t change once records exist', '；已有记录，不能再更改'],
+  ['在「帳戶」新增外幣帳戶（例如日幣現金）後，這裡會出現匯率欄位。', 'Add a foreign-currency account (e.g. Yen cash) under Accounts and a rate field appears here.', '在「账户」新增外币账户（例如日元现金）后，这里会出现汇率栏位。'],
+  ['匯率需手動輸入，網頁無法自動抓即時匯率。每筆外幣記錄會保存記帳當時的匯率，之後改匯率只影響新記錄和淨資產換算。', 'Rates are entered manually; the page can’t fetch live rates. Each foreign-currency record keeps the rate used at the time; changing a rate only affects new records and net worth.', '汇率需手动输入，网页无法自动抓实时汇率。每笔外币记录会保存记账当时的汇率，之后改汇率只影响新记录和净资产换算。'],
+  ['備份與同步', 'Backup and sync', '备份与同步'],
+  ['上次匯出備份：{d}', 'Last backup: {d}', '上次导出备份：{d}'], ['還沒有匯出過備份', 'No backup exported yet', '还没有导出过备份'], ['，建議現在匯出一份', ' — export one now', '，建议现在导出一份'],
+  ['匯出完整備份 (JSON)', 'Export full backup (JSON)', '导出完整备份 (JSON)'], ['匯出明細 (CSV / Excel)', 'Export records (CSV / Excel)', '导出明细 (CSV / Excel)'],
+  ['這裡無法直接下載檔案，請複製下面內容另存成 <b>{n}</b>。', 'Downloads aren’t available here. Copy the text below and save it as <b>{n}</b>.', '这里无法直接下载文件，请复制下面内容另存为 <b>{n}</b>。'],
+  ['複製', 'Copy', '复制'], ['關閉', 'Close', '关闭'],
+  ['從備份還原：選擇之前匯出的 JSON 檔，記錄會合併進來，不會刪掉現有資料。', 'Restore: choose a JSON backup. Records are merged in; nothing existing is deleted.', '从备份还原：选择之前导出的 JSON 文件，记录会合并进来，不会删掉现有数据。'],
+  ['檔案內有 {n} 筆記錄、{a} 個帳戶。', 'The file has {n} records and {a} accounts.', '文件内有 {n} 笔记录、{a} 个账户。'],
+  ['合併匯入', 'Merge in', '合并导入'],
+  ['共 {n} 筆記錄 · {a} 個帳戶 · {r} 個週期帳目', '{n} records · {a} accounts · {r} recurring', '共 {n} 笔记录 · {a} 个账户 · {r} 个周期账目'],
+  ['支出佔收入 {p}%', 'Spent {p}% of income', '支出占收入 {p}%'], ['本月沒有收入', 'No income this month', '本月没有收入'], ['收支比例', 'Income vs expense', '收支比例'],
+  ['外觀', 'Appearance', '外观'], ['跟隨系統', 'Match system', '跟随系统'], ['亮色', 'Light', '浅色'], ['暗色', 'Dark', '深色'],
+  ['只套用在這台裝置。', 'Applies to this device only.', '只应用在这台设备。'],
+  ['比上月多 {v}', '{v} more than last month', '比上月多 {v}'], ['比上月少 {v}', '{v} less than last month', '比上月少 {v}'], ['與上月相同', 'Same as last month', '与上月相同'],
+  ['佔本月{t} {p}%', '{p}% of this month’s {t}', '占本月{t} {p}%'], ['筆數', 'Records', '笔数'], ['平均每筆', 'Average', '平均每笔'], ['最大一筆', 'Largest', '最大一笔'],
+  ['近 6 個月', 'Last 6 months', '近 6 个月'], ['這個月的記錄', 'Records this month', '这个月的记录'],
+  ['本月', 'Month', '本月'], ['半年', '6 months', '半年'], ['一年', '1 year', '一年'], ['自訂', 'Custom', '自定义'], ['期間', 'Period', '期间'],
+  ['{a} 至 {b}', '{a} – {b}', '{a} 至 {b}'], ['期間內的記錄', 'Records in this period', '期间内的记录'], ['佔期間{t} {p}%', '{p}% of {t} in this period', '占期间{t} {p}%'],
+  ['開始日期', 'Start date', '开始日期'], ['結束日期', 'End date', '结束日期'],
+  ['帳號', 'Account', '账号'], ['登入方式：{p}', 'Signed in with {p}', '登录方式：{p}'], ['登出', 'Sign out', '退出登录'], ['確定登出', 'Confirm sign out', '确定退出'],
+  ['還有資料沒同步，現在登出會遺失這些變更。', 'Some changes haven’t synced yet. Signing out now will lose them.', '还有数据没同步，现在退出会丢失这些更改。'],
+  ['資料存在雲端資料庫，只有登入這個帳號才看得到。在其他裝置用同一個 email 或 Google 帳號登入即可同步。', 'Your data is stored in the cloud database and only this account can see it. Sign in with the same email or Google account on other devices to sync.', '数据存在云端数据库，只有登录这个账号才看得到。在其他设备用同一个 email 或 Google 账号登录即可同步。'],
+  ['資料存在雲端，用同一個帳號在手機或電腦登入，資料會自動同步。', 'Your data is in the cloud. Sign in with the same account on your phone or computer and it syncs automatically.', '数据存在云端，用同一个账号在手机或电脑登录，数据会自动同步。'],
+  ['登入後資料會存在雲端，手機和電腦自動同步。', 'Sign in to keep your data in the cloud, synced across your phone and computer.', '登录后数据会存在云端，手机和电脑自动同步。'],
+  ['寄送登入連結', 'Email me a sign-in link', '发送登录链接'], ['寄送中…', 'Sending…', '发送中…'],
+  ['已寄出登入連結到 {e}。請打開信件點連結登入；找不到的話看看垃圾郵件。', 'We sent a sign-in link to {e}. Open the email and tap the link; check spam if you don’t see it.', '已发送登录链接到 {e}。请打开邮件点链接登录；找不到的话看看垃圾邮件。'],
+  ['寄送失敗：{m}', 'Couldn’t send: {m}', '发送失败：{m}'], ['請輸入正確的 email', 'Enter a valid email address', '请输入正确的 email'],
+  ['或', 'or', '或'], ['使用 Google 登入', 'Continue with Google', '使用 Google 登录'], ['Google 登入失敗：{m}', 'Google sign-in failed: {m}', 'Google 登录失败：{m}'],
+  ['不需要密碼。第一次登入就會自動建立帳號。', 'No password needed. Your account is created the first time you sign in.', '不需要密码。第一次登录就会自动创建账号。'],
+  ['還沒設定 Supabase。請依 README 把網址和金鑰填進 config.js。', 'Supabase isn’t set up yet. Fill in the URL and key in config.js as described in the README.', '还没设置 Supabase。请依 README 把网址和密钥填进 config.js。'],
+  ['登入連結無效或已過期，請重新寄送。', 'That sign-in link is invalid or expired. Please request a new one.', '登录链接无效或已过期，请重新发送。'],
+  ['返回', 'Back', '返回'], ['編輯分類', 'Edit', '编辑分类'], ['每月 {v}', '{v} / month', '每月 {v}'], ['{n} 個分類上限', '{n} category limits', '{n} 个分类上限'], ['未設定', 'Not set', '未设置'],
+  ['{n} 項', '{n} items', '{n} 项'], ['支出 {a} · 收入 {b}', 'Expense {a} · Income {b}', '支出 {a} · 收入 {b}'],
+  ['語言', 'Language', '语言'],['語言設定會同步到你的其他裝置。', 'Your language choice syncs to your other devices.', '语言设置会同步到你的其他设备。'],
+  ['記帳備份', 'ledger-backup', '记账备份'], ['記帳明細', 'ledger-records', '记账明细'],
+  ['換算{b}', 'In {b}', '换算{b}'], ['轉入金額', 'Amount received', '转入金额'], ['備註', 'Note', '备注'], ['標籤', 'Tags', '标签'],
+  ['淨資產', 'Net worth', '净资产'],
+];
+const DICT = {}; for (const [k, en, cn] of DICT_ROWS) DICT[k] = { en, 'zh-CN': cn };
+// Default names translate until the user renames them.
+const DEFAULT_NAMES = {
+  food: ['餐飲', 'Food', '餐饮'], traffic: ['交通', 'Transport', '交通'], shop: ['購物', 'Shopping', '购物'], daily: ['日用', 'Household', '日用'],
+  home: ['居家', 'Home', '居家'], fun: ['娛樂', 'Fun', '娱乐'], med: ['醫療', 'Medical', '医疗'], edu: ['教育', 'Education', '教育'],
+  phone: ['通訊', 'Phone', '通讯'], ins: ['保險', 'Insurance', '保险'], social: ['社交', 'Social', '社交'], exp_other: ['其他', 'Other', '其他'],
+  salary: ['薪資', 'Salary', '薪资'], bonus: ['獎金', 'Bonus', '奖金'], invest: ['投資', 'Investment', '投资'], parttime: ['兼職', 'Side job', '兼职'],
+  refund: ['退款', 'Refund', '退款'], inc_other: ['其他', 'Other', '其他'],
+  cash: ['現金', 'Cash', '现金'], bank: ['銀行帳戶', 'Bank', '银行账户'], card: ['信用卡', 'Credit card', '信用卡'], epay: ['電子支付', 'E-wallet', '电子支付'],
+};
+const LANG_IDX = { 'zh-TW': 0, en: 1, 'zh-CN': 2 };
+const CUR_NAMES = { TWD: ['新台幣', 'Taiwan dollar', '新台币'], USD: ['美元', 'US dollar', '美元'], JPY: ['日圓', 'Japanese yen', '日元'], EUR: ['歐元', 'Euro', '欧元'], CNY: ['人民幣', 'Chinese yuan', '人民币'], HKD: ['港幣', 'Hong Kong dollar', '港币'], KRW: ['韓元', 'Korean won', '韩元'], GBP: ['英鎊', 'British pound', '英镑'], AUD: ['澳幣', 'Australian dollar', '澳元'], SGD: ['新加坡幣', 'Singapore dollar', '新加坡元'], THB: ['泰銖', 'Thai baht', '泰铢'], CAD: ['加幣', 'Canadian dollar', '加元'], MOP: ['澳門幣', 'Macau pataca', '澳门元'], MYR: ['馬來西亞令吉', 'Malaysian ringgit', '马来西亚林吉特'], VND: ['越南盾', 'Vietnamese dong', '越南盾'] };
+const CUR_SYM = { TWD: 'NT$', USD: 'US$', JPY: '¥', EUR: '€', CNY: 'CN¥', HKD: 'HK$', KRW: '₩', GBP: '£', AUD: 'A$', SGD: 'S$', THB: '฿', CAD: 'C$', MOP: 'MOP$', MYR: 'RM', VND: '₫' };
+const WEEKS = { 'zh-TW': '日一二三四五六'.split(''), 'zh-CN': '日一二三四五六'.split(''), en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
+
+function detectLang() {
+  const n = (navigator.language || '').toLowerCase();
+  if (n.startsWith('zh')) return /cn|sg|hans/.test(n) ? 'zh-CN' : 'zh-TW';
+  return n ? 'en' : 'zh-TW';
+}
+let lang = (() => { try { const v = localStorage.getItem('ledger-lang'); if (LANGS[v]) return v; } catch {} return detectLang(); })();
+function t(key, vars) {
+  let s = lang === 'zh-TW' ? key : (DICT[key]?.[lang] ?? key);
+  if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => vars[k] ?? m);
+  return s;
+}
+const loc = () => LOCALE[lang];
+
+const PALETTE = ['#E0704F','#E39B2D','#4E9A7E','#3B7FB0','#8C68C0','#CF5C9A','#2FA3A0','#A08B2A','#C0504A','#5F86C6','#6E9D44','#7C8591'];
+const ACCT_TYPES = { cash: '現金', bank: '銀行', credit: '信用卡', epay: '電子支付', other: '其他' };
+const TYPE_LABEL = { expense: '支出', income: '收入', transfer: '轉帳' };
+const typeName = k => t(TYPE_LABEL[k]);
+const FREQ_LABEL = { monthly: '每月', weekly: '每週', yearly: '每年' };
+const DEF_META = {
+  v: 2,
+  baseCur: 'TWD',
+  rates: {},
+  budgets: { total: 0, cats: {} },
+  recurring: [],
+  accounts: [
+    { id: 'cash', name: '現金', type: 'cash', init: 0, cur: 'TWD' },
+    { id: 'bank', name: '銀行帳戶', type: 'bank', init: 0, cur: 'TWD' },
+    { id: 'card', name: '信用卡', type: 'credit', init: 0, cur: 'TWD' },
+    { id: 'epay', name: '電子支付', type: 'epay', init: 0, cur: 'TWD' },
+  ],
+  cats: {
+    expense: [['food',0],['traffic',3],['shop',5],['daily',2],['home',7],['fun',4],['med',8],['edu',9],['phone',6],['ins',10],['social',1],['exp_other',11]]
+      .map(([id, c]) => ({ id, name: DEFAULT_NAMES[id][0], c })),
+    income: [['salary',2],['bonus',1],['invest',3],['parttime',6],['refund',9],['inc_other',11]]
+      .map(([id, c]) => ({ id, name: DEFAULT_NAMES[id][0], c })),
+  },
+  lastBackup: null,
+};
+
+// ---------- state ----------
+const clone = o => JSON.parse(JSON.stringify(o));
+let meta = clone(DEF_META);
+let months = {};            // 'YYYY-MM' -> { id: tx }
+let mode = 'pending';       // pending | cloud | local
+let ready = false;
+let view = 'add';
+const ui = { listMonth: null, statsMonth: null, statsType: 'expense', q: '', catType: 'expense', openAcct: null, confirm: null, exportText: null, importData: null, recType: 'expense', setSec: null };
+let needRender = false;
+
+const pad2 = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const today = () => ymd(new Date());
+const toDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d || 1); };
+const addDays = (s, n) => { const [y, m, d] = s.split('-').map(Number); return ymd(new Date(y, m - 1, d + n)); };
+const addMonth = (ym, n) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; };
+const daysIn = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
+const clampDate = (y, m, d) => `${y}-${pad2(m)}-${pad2(Math.min(d, daysIn(`${y}-${pad2(m)}`)))}`;
+const ymLabel = ym => new Intl.DateTimeFormat(loc(), { year: 'numeric', month: 'long' }).format(toDate(ym + '-01'));
+const monthShort = ym => lang === 'en' ? new Intl.DateTimeFormat('en-US', { month: 'short' }).format(toDate(ym + '-01')) : Number(ym.slice(5)) + '月';
+const weekday = s => toDate(s).getDay();
+const dayLabel = s => {
+  const td = today(); const rel = s === td ? t('今天') + ' · ' : s === addDays(td, -1) ? t('昨天') + ' · ' : '';
+  return rel + new Intl.DateTimeFormat(loc(), { month: 'short', day: 'numeric', weekday: 'short' }).format(toDate(s));
+};
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const round2 = n => Math.round(n * 100) / 100;
+const numStr = n => Math.abs(round2(n)).toLocaleString(loc(), { maximumFractionDigits: 2 });
+const fmt = n => (n < 0 ? '-' : '') + '$' + numStr(n);
+const sym = cur => CUR_SYM[cur] || cur + ' ';
+const fmtC = (n, cur) => !cur || cur === meta.baseCur ? fmt(n) : (n < 0 ? '-' : '') + sym(cur) + numStr(n);
+const curName = cur => CUR_NAMES[cur]?.[LANG_IDX[lang]] || cur;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const initial = s => esc([...String(s || '?')][0].toUpperCase());
+// Line icons for default categories, account types and settings sections; custom categories fall back to their first letter.
+const DOTS = 'M6 12h.01M12 12h.01M18 12h.01';
+const ICON_PATHS = {
+  food: 'M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10M16 3c-1.7 0-3 2-3 5s1.3 4 3 4M16 3v18',
+  traffic: 'M5 16V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v9M5 16h14M5 16v3M19 16v3M5 11h14M8.5 13.5h.01M15.5 13.5h.01',
+  shop: 'M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2',
+  daily: 'M9 3h6M10 3v3l-3 4v11h10V10l-3-4V3M7 14h10',
+  home: 'M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-5h4v5',
+  fun: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM10 8.5v7l6-3.5z',
+  med: 'M9 4h6v5h5v6h-5v5H9v-5H4V9h5z',
+  edu: 'M4 19V5a2 2 0 0 1 2-2h14v14H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h14v-4',
+  phone: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2',
+  ins: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
+  social: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.8c2 .7 3.2 2.5 3.5 5.2',
+  exp_other: DOTS, inc_other: DOTS, t_other: DOTS,
+  salary: 'M3 7h18v10H3zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM6 10v4M18 10v4',
+  bonus: 'M4 10h16v11H4zM3 7h18v3H3zM12 7v14M12 7c-1.5-3-5-3.5-5-1.5S10 7 12 7zM12 7c1.5-3 5-3.5 5-1.5S14 7 12 7z',
+  invest: 'M3 17l6-6 4 4 8-8M15 7h6v6',
+  parttime: 'M3 8h18v12H3zM8 8V5h8v3M3 13h18',
+  refund: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
+  transfer: 'M4 8h15l-4-4M20 16H5l4 4',
+  t_cash: 'M3 7h18v10H3zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM6 10v4M18 10v4',
+  t_bank: 'M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18',
+  t_credit: 'M3 6h18v12H3zM3 10h18M7 15h4',
+  t_epay: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM10 9.5a3 3 0 0 1 4 0M8.5 7.5a5 5 0 0 1 7 0M12 12h.01',
+  s_account: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c.8-4 4-6 8-6s7.2 2 8 6',
+  s_theme: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 3v18M12 7h4.5M12 11h6.5M12 15h6M12 19h3.5',
+  s_lang: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9z',
+  s_budget: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01',
+  s_rec: 'M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4',
+  s_cats: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  s_cur: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v11',
+  s_backup: 'M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8a4 4 0 0 1 .5 8M12 12v8M9 15l3-3 3 3',
+  receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
+  plus: 'M12 5v14M5 12h14',
+  moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
+  sun: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+};
+const icon = k => ICON_PATHS[k] ? `<svg viewBox="0 0 24 24" class="ico${ICON_PATHS[k] === DOTS ? ' dots' : ''}" aria-hidden="true"><path d="${ICON_PATHS[k]}"/></svg>` : '';
+const glyph = (id, name) => ICON_PATHS[id] ? icon(id) : initial(name);
+const ACCT_COLORS = { cash: '#4E9A7E', bank: '#3B7FB0', credit: '#C0504A', epay: '#8C68C0', other: '#7C8591' };
+// Appearance is a per-device choice: "system" hands control back to the OS / viewer setting.
+const THEMES = { system: '跟隨系統', light: '亮色', dark: '暗色' };
+const HOST_THEME = document.documentElement.getAttribute('data-theme');
+let themePref = (() => { try { const v = localStorage.getItem('ledger-theme'); if (THEMES[v]) return v; } catch {} return 'system'; })();
+function applyTheme() {
+  const r = document.documentElement;
+  if (themePref !== 'system') r.setAttribute('data-theme', themePref);
+  else if (HOST_THEME) r.setAttribute('data-theme', HOST_THEME);
+  else r.removeAttribute('data-theme');
+}
+const isDark = () => {
+  const a = document.documentElement.getAttribute('data-theme');
+  return a ? a === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+};
+// Header shortcut: moon while light (tap for dark), sun while dark (tap for light).
+function renderThemeBtn() {
+  const b = document.getElementById('themebtn'); if (!b) return;
+  const dark = isDark();
+  b.innerHTML = icon(dark ? 'sun' : 'moon');
+  b.setAttribute('aria-label', t(dark ? '亮色' : '暗色'));
+  b.title = t(dark ? '亮色' : '暗色');
+}
+function setTheme(v) {
+  themePref = v; try { localStorage.setItem('ledger-theme', v); } catch {}
+  applyTheme(); renderThemeBtn();
+}
+applyTheme();
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderThemeBtn); } catch {}
+const SEC_COLORS = { account: '#0F5C55', theme: '#7C8591', lang: '#3B7FB0', budget: '#E39B2D', rec: '#8C68C0', cats: '#E0704F', cur: '#2FA3A0', backup: '#4E9A7E' };
+
+const allTx = () => Object.values(months).flatMap(m => Object.values(m));
+const monthTx = ym => Object.values(months[ym] || {});
+const findCat = (type, id) => (meta.cats[type] || []).find(c => c.id === id);
+const nameOf = o => { const d = DEFAULT_NAMES[o.id]; return d && o.name === d[0] ? d[LANG_IDX[lang]] : o.name; };
+const catName = (type, id) => { const c = findCat(type, id); return c ? nameOf(c) : t('未分類'); };
+const catColor = c => c ? PALETTE[c.c % PALETTE.length] : PALETTE[11];
+const findAcct = id => meta.accounts.find(a => a.id === id);
+const acctName = id => { const a = findAcct(id); return a ? nameOf(a) : t('已刪除帳戶'); };
+const acctCur = id => findAcct(id)?.cur || meta.baseCur;
+const rateOf = cur => cur === meta.baseCur ? 1 : Number(meta.rates[cur]) || 0;
+const val = tx => round2(tx.amount * (tx.cur && tx.cur !== meta.baseCur ? (tx.rate || 0) : 1));   // value in base currency
+const sortTx = list => list.sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0));
+const parseTags = s => [...new Set([...String(s).matchAll(/#([^\s#]+)/g)].map(m => m[1]))];
+const stripTags = s => String(s).replace(/#[^\s#]+/g, '').replace(/\s+/g, ' ').trim();
+const noteWithTags = tx => [tx.note, ...(tx.tags || []).map(x => '#' + x)].filter(Boolean).join(' ');
+
+function balances() {
+  const bal = {};
+  for (const a of meta.accounts) bal[a.id] = Number(a.init) || 0;
+  for (const x of allTx()) {
+    if (x.type === 'expense') bal[x.acct] = (bal[x.acct] || 0) - x.amount;
+    else if (x.type === 'income') bal[x.acct] = (bal[x.acct] || 0) + x.amount;
+    else { bal[x.acct] = (bal[x.acct] || 0) - x.amount; bal[x.to] = (bal[x.to] || 0) + (x.toAmount ?? x.amount); }
+  }
+  return bal;
+}
+function sums(list) {
+  let inc = 0, exp = 0;
+  for (const x of list) { if (x.type === 'income') inc += val(x); else if (x.type === 'expense') exp += val(x); }
+  return { inc: round2(inc), exp: round2(exp), net: round2(inc - exp) };
+}
+function allTags() {
+  const m = new Map();
+  for (const x of allTx()) for (const g of x.tags || []) { const e = m.get(g) || { tag: g, n: 0, exp: 0, inc: 0, lastTs: 0 }; e.n++; if (x.type === 'expense') e.exp += val(x); if (x.type === 'income') e.inc += val(x); e.lastTs = Math.max(e.lastTs, x.ts || 0, Date.parse(x.date) || 0); m.set(g, e); }
+  return [...m.values()];
+}
+
+// ---------- persistence ----------
+// Cache and pending-write keys are per signed-in user, so a shared device never mixes two people's books.
+let CACHE_KEY = 'ledger-cache-anon', PENDING_KEY = 'ledger-pending-anon';
+const LAST_KEY = 'ledger-last-v1';
+const writing = {}, dirty = {};
+let failed = new Set();
+let inflight = 0;
+
+function cacheLocal() { lsSet(CACHE_KEY, { meta, months }); }
+function savePending() { lsSet(PENDING_KEY, [...failed]); }
+
+function persist(key) {
+  cacheLocal();
+  if (mode !== 'cloud') return;
+  failed.add(key); savePending();
+  flush(key);
+}
+async function flush(key) {
+  if (writing[key]) { dirty[key] = true; return; }
+  writing[key] = true; inflight++; setSync();
+  try {
+    do { dirty[key] = false; await writeWithRetry(key); } while (dirty[key]);
+    failed.delete(key); savePending();
+  } catch (e) {
+    console.warn('sync failed', key, e);
+    if (e && e.code === 'quota_exceeded') toast(t('雲端空間已滿，請匯出備份後刪除舊資料'));
+  } finally { writing[key] = false; inflight--; setSync(); }
+}
+async function writeWithRetry(key) {
+  try { await writeKey(key); }
+  catch (e) {
+    if (e && (e.code === 'unavailable' || e.code === 'resource_exhausted')) { await new Promise(r => setTimeout(r, 800 + Math.random() * 1200)); await writeKey(key); }
+    else throw e;
+  }
+}
+async function writeKey(key) {
+  const docId = key === 'meta' ? 'meta' : 'm-' + key;
+  let res;
+  if (key !== 'meta' && (!months[key] || !Object.keys(months[key]).length)) {
+    res = await sb.from('ledger_docs').delete().eq('user_id', user.id).eq('doc_id', docId);
+    if (!res.error) delete rows[docId];
+  } else {
+    const data = key === 'meta' ? clone(meta) : { tx: clone(months[key]) };
+    res = await sb.from('ledger_docs').upsert({ user_id: user.id, doc_id: docId, data, updated_at: new Date().toISOString() });
+    if (!res.error) rows[docId] = data;
+  }
+  if (res.error) throw { code: 'unavailable', message: res.error.message };
+}
+function retryFailed() { for (const k of [...failed]) flush(k); }
+
+function setSync() {
+  const el = document.getElementById('sync');
+  let s, txt;
+  if (mode === 'pending' || (mode === 'cloud' && !ready)) { s = 'busy'; txt = '連線中'; }
+  else if (mode === 'local') { s = 'local'; txt = '僅存本機'; }
+  else if (inflight) { s = 'busy'; txt = '同步中'; }
+  else if (failed.size) { s = 'err'; txt = '未同步，點此重試'; }
+  else { s = 'ok'; txt = '雲端已同步'; }
+  el.dataset.s = s; el.querySelector('span').textContent = t(txt);
+  const sv = document.querySelector('.pad .save');
+  if (sv) { sv.disabled = !ready; sv.textContent = ready ? t(form.editId ? '更新' : '儲存') : t('載入中'); }
+}
+
+// Rebuild app state from the server rows. Documents with unsaved local changes keep the local version.
+function rebuildFromRows(keepPending) {
+  const ms = {};
+  for (const [id, data] of Object.entries(rows)) if (id.startsWith('m-') && data && data.tx) ms[id.slice(2)] = clone(data.tx);
+  if (keepPending) for (const k of failed) if (k !== 'meta') { if (months[k]) ms[k] = months[k]; else delete ms[k]; }
+  if (!(keepPending && failed.has('meta'))) meta = rows.meta ? normalizeMeta(clone(rows.meta)) : clone(DEF_META);
+  months = ms;
+  applyLang(meta.lang);
+}
+function normalizeMeta(m) {
+  const d = clone(DEF_META);
+  const out = { ...d, ...m,
+    cats: { expense: m.cats?.expense || d.cats.expense, income: m.cats?.income || d.cats.income },
+    accounts: m.accounts || d.accounts,
+    rates: m.rates || {}, budgets: { total: Number(m.budgets?.total) || 0, cats: m.budgets?.cats || {} },
+    recurring: m.recurring || [], baseCur: m.baseCur || 'TWD' };
+  for (const a of out.accounts) if (!a.cur) a.cur = out.baseCur;
+  return out;
+}
+// Changes made on this device that never reached the cloud (e.g. closed while offline) are merged back in.
+function mergePending() {
+  if (!failed.size) return;
+  const cache = lsGet(CACHE_KEY);
+  if (!cache) { failed.clear(); savePending(); return; }
+  for (const k of failed) {
+    if (k === 'meta') { if (cache.meta) meta = normalizeMeta(cache.meta); }
+    else months[k] = { ...(months[k] || {}), ...((cache.months || {})[k] || {}) };
+  }
+  cacheLocal();
+  retryFailed();
+}
+
+// ---------- Supabase: sign-in + storage ----------
+// Each document (meta, m-YYYY-MM) is one row in ledger_docs; row-level security limits every user to their own rows.
+const CFG = window.LEDGER_CONFIG || {};
+const sb = (window.supabase && CFG.supabaseUrl && CFG.supabaseAnonKey && !/YOUR_/.test(CFG.supabaseUrl + CFG.supabaseAnonKey))
+  ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } })
+  : null;
+let user = null, rows = {}, channel = null, loadTimer = null;
+const redirectUrl = () => location.origin + location.pathname;
+
+async function loadAll() {
+  const { data, error } = await sb.from('ledger_docs').select('doc_id,data');
+  if (error) throw error;
+  rows = {}; for (const r of data) rows[r.doc_id] = r.data;
+}
+function startData(u) {
+  if (user && user.id === u.id) return;
+  user = u; mode = 'cloud'; ready = false;
+  CACHE_KEY = 'ledger-cache-' + u.id; PENDING_KEY = 'ledger-pending-' + u.id;
+  failed = new Set(lsGet(PENDING_KEY) || []);
+  const cache = lsGet(CACHE_KEY);
+  if (cache) { meta = normalizeMeta(cache.meta || {}); months = cache.months || {}; applyLang(meta.lang); }
+  showApp(); render(true); setSync();
+  const tryLoad = async () => {
+    try {
+      await loadAll();
+      rebuildFromRows(false);
+      ready = true; mergePending(); cacheLocal(); setSync(); render(true); runRecurring();
+      subscribe();
+    } catch (e) { console.warn(e); setSync(); loadTimer = setTimeout(tryLoad, 5000); }
+  };
+  tryLoad();
+}
+// Live updates from other devices. Own writes echo back too; documents with unsaved local edits are left alone.
+function subscribe() {
+  if (channel) return;
+  channel = sb.channel('ledger-' + user.id)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ledger_docs', filter: 'user_id=eq.' + user.id }, p => {
+      const rec = p.eventType === 'DELETE' ? p.old : p.new;
+      if (!rec || !rec.doc_id || (rec.user_id && rec.user_id !== user.id)) return;
+      if (p.eventType === 'DELETE') delete rows[rec.doc_id]; else rows[rec.doc_id] = p.new.data;
+      const k = rec.doc_id === 'meta' ? 'meta' : rec.doc_id.slice(2);
+      if (writing[k] || failed.has(k)) return;
+      const prevLang = lang; rebuildFromRows(true); cacheLocal(); render(prevLang !== lang);
+    })
+    .subscribe();
+}
+async function refreshFromServer() {
+  if (!ready || !user || failed.size || inflight) return;
+  try { await loadAll(); const prevLang = lang; rebuildFromRows(true); cacheLocal(); render(prevLang !== lang); } catch (e) { console.warn(e); }
+}
+
+function showApp() { document.getElementById('login').hidden = true; document.getElementById('app').hidden = false; }
+function showLogin(msg, isErr) {
+  document.getElementById('app').hidden = true;
+  const el = document.getElementById('login'); el.hidden = false;
+  const langBtns = `<div class="langs login-langs" role="group" aria-label="${t('語言')}">${Object.entries(LANGS).map(([k, v]) => `<button type="button" data-login-lang="${k}" lang="${k}" aria-pressed="${lang === k}">${v}</button>`).join('')}</div>`;
+  el.innerHTML = `<div class="login-card">
+    <span class="logo big" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/></svg></span>
+    <h1>${t('隨手記帳')}</h1>
+    ${sb ? `<p class="muted">${t('登入後資料會存在雲端，手機和電腦自動同步。')}</p>
+    <form id="login-form" class="login-form" novalidate>
+      <label for="l-email" class="sr">Email</label>
+      <input class="field" id="l-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required>
+      <button class="btn primary big" id="l-send" type="submit">${t('寄送登入連結')}</button>
+    </form>
+    <div class="login-msg${isErr ? ' err' : ''}" id="l-msg" role="status"${msg ? '' : ' hidden'}>${esc(msg || '')}</div>
+    <div class="divider"><span>${t('或')}</span></div>
+    <button type="button" class="btn big gbtn" id="l-google"><span class="g" aria-hidden="true">G</span>${t('使用 Google 登入')}</button>
+    <p class="hint" style="text-align:center">${t('不需要密碼。第一次登入就會自動建立帳號。')}</p>`
+    : `<div class="notice warn">${t('還沒設定 Supabase。請依 README 把網址和金鑰填進 config.js。')}</div>`}
+    ${langBtns}
+  </div>`;
+  for (const b of el.querySelectorAll('[data-login-lang]')) b.onclick = () => { applyLang(b.dataset.loginLang); showLogin(); };
+  if (!sb) return;
+  const setMsg = (m, err) => { const box = document.getElementById('l-msg'); box.hidden = false; box.textContent = m; box.classList.toggle('err', !!err); };
+  document.getElementById('login-form').onsubmit = async e => {
+    e.preventDefault();
+    const email = document.getElementById('l-email').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(t('請輸入正確的 email'), true); return; }
+    const btn = document.getElementById('l-send'); btn.disabled = true; btn.textContent = t('寄送中…');
+    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectUrl() } });
+    btn.disabled = false; btn.textContent = t('寄送登入連結');
+    if (error) setMsg(t('寄送失敗：{m}', { m: error.message }), true);
+    else setMsg(t('已寄出登入連結到 {e}。請打開信件點連結登入；找不到的話看看垃圾郵件。', { e: email }));
+  };
+  document.getElementById('l-google').onclick = async () => {
+    const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectUrl() } });
+    if (error) setMsg(t('Google 登入失敗：{m}', { m: error.message }), true);
+  };
+}
+async function signOut() {
+  try { if (channel) await sb.removeChannel(channel); } catch {}
+  try { await sb.auth.signOut(); } catch {}
+  try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(PENDING_KEY); } catch {}
+  location.replace(redirectUrl());
+}
+async function initAuth() {
+  // A link that failed (expired or already used) comes back with the error in the URL hash.
+  const hp = new URLSearchParams(location.hash.slice(1));
+  const linkErr = hp.get('error_description');
+  if (!sb) { showLogin(); return; }
+  sb.auth.onAuthStateChange((ev, s) => {
+    if (s && s.user) {
+      if (/access_token|refresh_token/.test(location.hash)) history.replaceState(null, '', redirectUrl());
+      startData(s.user);
+    } else if (ev === 'SIGNED_OUT' && user) location.replace(redirectUrl());
+  });
+  const { data } = await sb.auth.getSession();
+  if (data.session) startData(data.session.user);
+  else { if (linkErr) history.replaceState(null, '', redirectUrl()); showLogin(linkErr ? t('登入連結無效或已過期，請重新寄送。') : '', !!linkErr); }
+}
+
+// ---------- language ----------
+function applyLang(v) {
+  if (!LANGS[v] || v === lang) { renderChrome(); return; }
+  lang = v;
+  try { localStorage.setItem('ledger-lang', v); } catch {}
+  renderChrome();
+}
+function renderChrome() {
+  document.documentElement.lang = lang;
+  document.getElementById('brand').textContent = t('隨手記帳');
+  const labels = { add: '記一筆', list: '明細', stats: '統計', accounts: '帳戶', settings: '設定' };
+  for (const b of document.querySelectorAll('#tabs button')) b.querySelector('span').textContent = t(labels[b.dataset.v]);
+  renderThemeBtn();
+}
+function setLang(v) {
+  if (!LANGS[v]) return;
+  applyLang(v);
+  meta.lang = v; persist('meta');
+  setSync(); render(true);
+}
+
+// ---------- recurring ----------
+function advance(r, d) {
+  const [y, m] = d.split('-').map(Number);
+  const sd = Number(r.start.slice(8));
+  if (r.freq === 'weekly') return addDays(d, 7);
+  if (r.freq === 'yearly') return clampDate(y + 1, Number(r.start.slice(5, 7)), sd);
+  const n = new Date(y, m, 1);
+  return clampDate(n.getFullYear(), n.getMonth() + 1, sd);
+}
+function freqText(r) {
+  if (r.freq === 'weekly') return t('每週{w}', { w: WEEKS[lang][weekday(r.start)] });
+  if (r.freq === 'yearly') return t('每年 {m}/{d}', { m: Number(r.start.slice(5, 7)), d: Number(r.start.slice(8)) });
+  return t('每月 {d} 日', { d: Number(r.start.slice(8)) });
+}
+function makeTx(src, id, date) {
+  const tx = { id, type: src.type, amount: src.amount, acct: src.acct, date, note: src.note || '', ts: Date.now() };
+  if (src.tags?.length) tx.tags = [...src.tags];
+  if (src.type === 'transfer') { tx.to = src.to; if (src.toAmount != null) tx.toAmount = src.toAmount; }
+  else tx.cat = src.cat;
+  const cur = acctCur(src.acct);
+  if (cur !== meta.baseCur) { tx.cur = cur; tx.rate = rateOf(cur); }
+  return tx;
+}
+// Entries due on or before today are created on open. Ids are derived from rule + date, so two devices never double-post.
+function runRecurring() {
+  if (!ready) return;
+  const td = today(); let n = 0, metaChanged = false; const touched = new Set();
+  for (const r of meta.recurring) {
+    if (!r.active) continue;
+    let guard = 0;
+    while (r.next <= td && guard++ < 500) {
+      const id = 'r' + r.id + '_' + r.next.replace(/-/g, '');
+      const ym = r.next.slice(0, 7);
+      if (!months[ym]?.[id] && !(r.skip || []).includes(r.next)) { (months[ym] ||= {})[id] = { ...makeTx(r, id, r.next), rid: r.id }; touched.add(ym); n++; }
+      r.next = advance(r, r.next); metaChanged = true;
+    }
+  }
+  if (metaChanged) persist('meta');
+  for (const ym of touched) persist(ym);
+  if (n) { render(); toast(t('已自動記入 {n} 筆週期帳目', { n })); }
+}
+
+// ---------- entry form ----------
+const last = Object.assign({ expense: { cat: 'food', acct: 'cash' }, income: { cat: 'salary', acct: 'bank' }, transfer: { acct: 'bank', to: 'cash' } }, lsGet(LAST_KEY) || {});
+const form = { type: 'expense', expr: '', cat: last.expense.cat, acct: last.expense.acct, to: null, date: today(), note: '', rate: '', toAmt: '', editId: null, editYm: null, delArm: false };
+
+function resetForm(type = form.type) {
+  Object.assign(form, { type, expr: '', note: '', rate: '', toAmt: '', date: today(), editId: null, editYm: null, delArm: false });
+  const l = last[type];
+  form.acct = findAcct(l.acct) ? l.acct : meta.accounts[0]?.id;
+  if (type === 'transfer') { form.to = findAcct(l.to) && l.to !== form.acct ? l.to : meta.accounts.find(a => a.id !== form.acct)?.id; form.cat = null; }
+  else form.cat = findCat(type, l.cat) ? l.cat : meta.cats[type][0]?.id;
+}
+function evalExpr(s) {
+  const parts = s.match(/[+-]?[0-9.]+/g); if (!parts) return 0;
+  return round2(parts.reduce((a, p) => a + (parseFloat(p) || 0), 0));
+}
+function press(k) {
+  let e = form.expr; const seg = e.split(/[+-]/).pop();
+  if (/^[0-9]$/.test(k)) {
+    if (seg.includes('.') && seg.split('.')[1].length >= 2) return;
+    if (seg === '0') e = e.slice(0, -1);
+    if (e.length < 20) e += k;
+  } else if (k === '00') { if (seg && seg !== '0' && !seg.includes('.') && e.length < 19) e += '00'; }
+  else if (k === '.') { if (!seg.includes('.')) e += seg ? '.' : '0.'; }
+  else if (k === '+' || k === '-') { if (!e) return; if (/[+-]$/.test(e)) e = e.slice(0, -1); if (e.endsWith('.')) e = e.slice(0, -1); e += k; }
+  else if (k === 'back') e = e.slice(0, -1);
+  form.expr = e; updateAmount();
+}
+function updateAmount() {
+  const box = document.getElementById('amount'); if (!box) return;
+  const hasOp = /[0-9][+-]/.test(form.expr);
+  box.querySelector('.expr').textContent = hasOp ? form.expr.replace(/-/g, ' − ').replace(/\+/g, ' + ') : '';
+  const shown = hasOp ? numStr(evalExpr(form.expr)) : Number(form.expr || 0) ? form.expr.replace(/^(\d+)/, m => Number(m).toLocaleString(loc())) : (form.expr || '0');
+  const cur = acctCur(form.acct);
+  box.querySelector('.val').innerHTML = `<small>${esc(cur)}</small>${esc(shown)}`;
+  box.querySelector('.val').className = 'val num ' + (form.type === 'expense' ? 'exp' : form.type === 'income' ? 'inc' : 'xfer');
+  box.dataset.t = form.type;
+  const ac = document.getElementById('amt-cat');
+  if (ac) {
+    if (form.type === 'transfer') ac.innerHTML = `<span class="badge" style="--c:var(--xfer)">${icon('transfer')}</span><span>${esc(acctName(form.acct))} → ${esc(acctName(form.to))}</span>`;
+    else { const c = findCat(form.type, form.cat); ac.innerHTML = c ? `<span class="badge" style="--c:${catColor(c)}">${glyph(c.id, nameOf(c))}</span><span>${esc(nameOf(c))}</span>` : ''; }
+  }
+  const eq = document.getElementById('base-eq');
+  if (eq) { const r = Number(form.rate) || rateOf(cur); eq.textContent = r ? `≈ ${fmt(evalExpr(form.expr) * r)}` : ''; }
+  const ta = document.getElementById('f-toamt');
+  if (ta && !form.toAmt) { const v = suggestToAmt(); ta.placeholder = v ? String(v) : t('金額'); }
+}
+function suggestToAmt() {
+  const a = evalExpr(form.expr), rf = rateOf(acctCur(form.acct)), rt = rateOf(acctCur(form.to));
+  return a && rf && rt ? round2(a * rf / rt) : 0;
+}
+function monthBudgetState(ym, catId) {
+  const b = meta.budgets; const list = monthTx(ym).filter(x => x.type === 'expense');
+  const total = sums(list).exp;
+  const catSpent = catId ? round2(list.filter(x => x.cat === catId).reduce((a, x) => a + val(x), 0)) : 0;
+  return { total, totalLimit: Number(b.total) || 0, catSpent, catLimit: Number(b.cats[catId]) || 0 };
+}
+function budgetWarning(tx) {
+  if (tx.type !== 'expense') return '';
+  const ym = tx.date.slice(0, 7); const s = monthBudgetState(ym, tx.cat); const v = val(tx);
+  const c = catName('expense', tx.cat);
+  if (s.catLimit && s.catSpent > s.catLimit) return t('{c}預算已超支 {v}', { c, v: fmt(s.catSpent - s.catLimit) });
+  if (s.totalLimit && s.total > s.totalLimit) return t('本月總預算已超支 {v}', { v: fmt(s.total - s.totalLimit) });
+  if (s.catLimit && s.catSpent >= s.catLimit * .8 && s.catSpent - v < s.catLimit * .8) return t('{c}預算已用 {p}%', { c, p: Math.round(s.catSpent / s.catLimit * 100) });
+  if (s.totalLimit && s.total >= s.totalLimit * .8 && s.total - v < s.totalLimit * .8) return t('本月預算已用 {p}%', { p: Math.round(s.total / s.totalLimit * 100) });
+  return '';
+}
+function saveTx() {
+  if (!ready) return;
+  const amt = evalExpr(form.expr);
+  const box = document.getElementById('amount');
+  if (!(amt > 0)) { box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); toast(t('先輸入金額')); return; }
+  if (form.type === 'transfer' && (!form.to || form.to === form.acct)) { toast(t('轉出和轉入要選不同帳戶')); return; }
+  if (form.type !== 'transfer' && !form.cat) { toast(t('選一個分類')); return; }
+  if (!findAcct(form.acct)) { toast(t('先到「帳戶」新增一個帳戶')); return; }
+  const cur = acctCur(form.acct);
+  let rate = 0;
+  if (cur !== meta.baseCur) {
+    rate = Number(form.rate) || rateOf(cur);
+    if (!(rate > 0)) { toast(t('請輸入 {c} 對 {b} 的匯率', { c: cur, b: meta.baseCur })); document.getElementById('f-rate')?.focus(); return; }
+    if (rate !== rateOf(cur)) { meta.rates[cur] = rate; persist('meta'); }
+  }
+  let toAmount = null;
+  if (form.type === 'transfer' && acctCur(form.to) !== cur) {
+    toAmount = round2(Number(form.toAmt) || suggestToAmt());
+    if (!(toAmount > 0)) { toast(t('請輸入轉入的 {c} 金額', { c: acctCur(form.to) })); document.getElementById('f-toamt')?.focus(); return; }
+  }
+  const editing = !!form.editId;
+  const id = form.editId || newId();
+  const prev = editing ? months[form.editYm]?.[id] : null;
+  const tags = parseTags(form.note);
+  const tx = makeTx({ type: form.type, amount: amt, acct: form.acct, to: form.to, cat: form.cat, note: stripTags(form.note), tags, toAmount }, id, form.date || today());
+  if (cur !== meta.baseCur) tx.rate = rate;
+  if (prev) { tx.ts = prev.ts || tx.ts; if (prev.rid) tx.rid = prev.rid; }
+  const ym = tx.date.slice(0, 7);
+  if (editing && form.editYm !== ym && months[form.editYm]) { delete months[form.editYm][id]; persist(form.editYm); }
+  (months[ym] ||= {})[id] = tx; persist(ym);
+  last[form.type] = form.type === 'transfer' ? { acct: form.acct, to: form.to } : { cat: form.cat, acct: form.acct };
+  lsSet(LAST_KEY, last);
+  const what = form.type === 'transfer' ? `${acctName(tx.acct)} → ${acctName(tx.to)}` : catName(tx.type, tx.cat);
+  const warn = budgetWarning(tx);
+  resetForm(form.type);
+  if (editing) { view = 'list'; render(true); toast(t('已更新 {w} {a}', { w: what, a: fmtC(amt, tx.cur) }), null, null, warn); }
+  else { render(true); toast(t('已記下 {t} {a} · {w}', { t: typeName(tx.type), a: fmtC(amt, tx.cur), w: what }), t('復原'), () => { if (months[ym]) { delete months[ym][id]; persist(ym); render(); toast(t('已復原')); } }, warn); }
+}
+function startEdit(x) {
+  Object.assign(form, { type: x.type, expr: String(x.amount), cat: x.cat || null, acct: x.acct, to: x.to || null, date: x.date, note: noteWithTags(x), rate: x.rate ? String(x.rate) : '', toAmt: x.toAmount != null ? String(x.toAmount) : '', editId: x.id, editYm: x.date.slice(0, 7), delArm: false });
+  view = 'add'; render(true);
+}
+function deleteEditing() {
+  const ym = form.editYm, id = form.editId; const x = months[ym]?.[id];
+  if (x?.rid) { const r = meta.recurring.find(q => q.id === x.rid); if (r) { (r.skip ||= []).push(x.date); persist('meta'); } }
+  if (months[ym]) { delete months[ym][id]; persist(ym); }
+  resetForm(form.type); view = 'list'; render(true); toast(t('已刪除這筆記錄'));
+}
+function makeRecurringFromForm() {
+  const amt = evalExpr(form.expr);
+  if (!(amt > 0)) { toast(t('先輸入金額')); return; }
+  const r = { id: newId(), type: form.type, amount: amt, acct: form.acct, note: stripTags(form.note), tags: parseTags(form.note), freq: 'monthly', active: true };
+  if (form.type === 'transfer') { r.to = form.to; if (acctCur(form.to) !== acctCur(form.acct)) r.toAmount = round2(Number(form.toAmt) || suggestToAmt()); } else r.cat = form.cat;
+  r.start = form.date; r.next = advance(r, form.date);
+  meta.recurring.push(r); persist('meta');
+  toast(t('已設為{f}固定記帳，下次 {d}', { f: freqText(r), d: r.next }));
+}
+
+// ---------- toast ----------
+let toastTimer;
+function toast(msg, actLabel, act, warn) {
+  const el = document.getElementById('toast');
+  el.innerHTML = `<span>${esc(msg)}${warn ? `<span class="warnline">${esc(warn)}</span>` : ''}</span>` + (actLabel ? `<button type="button">${esc(actLabel)}</button>` : '');
+  el.hidden = false;
+  if (actLabel) el.querySelector('button').onclick = () => { el.hidden = true; act(); };
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, actLabel || warn ? 5000 : 2200);
+}
+
+// ---------- views ----------
+function acctOptions(sel, exclude) {
+  return meta.accounts.filter(a => a.id !== exclude).map(a => `<option value="${esc(a.id)}"${a.id === sel ? ' selected' : ''}>${esc(nameOf(a))}${a.cur !== meta.baseCur ? ` (${esc(a.cur)})` : ''}</option>`).join('');
+}
+function curOptions(sel) { return Object.keys(CUR_SYM).map(k => `<option value="${k}"${k === sel ? ' selected' : ''}>${k} ${esc(curName(k))}</option>`).join(''); }
+function catGrid() {
+  if (form.type === 'transfer') {
+    return `<div class="xfer-box" id="dyn-cats">
+      <label>${t('轉出帳戶')}<select class="field" id="f-from">${acctOptions(form.acct)}</select></label>
+      <span class="arrow" aria-hidden="true">→</span>
+      <label>${t('轉入帳戶')}<select class="field" id="f-to">${acctOptions(form.to, form.acct)}</select></label>
+    </div>`;
+  }
+  return `<div class="cats" id="dyn-cats" role="group" aria-label="${t('分類')}">${meta.cats[form.type].map(c =>
+    `<button type="button" class="cat" data-cat="${esc(c.id)}" style="--c:${catColor(c)}" aria-pressed="${c.id === form.cat}"><span class="badge">${glyph(c.id, nameOf(c))}</span>${esc(nameOf(c))}</button>`).join('')}<button type="button" class="cat add" data-act="edit-cats"><span class="badge">${icon('plus')}</span>${t('編輯分類')}</button></div>`;
+}
+function extraRow() {
+  const cur = acctCur(form.acct); const parts = [];
+  if (cur !== meta.baseCur) parts.push(`<label for="f-rate">${t('匯率 1 {c} =', { c: esc(cur) })}</label><input class="field num" id="f-rate" type="number" inputmode="decimal" step="any" min="0" value="${esc(form.rate || meta.rates[cur] || '')}" placeholder="${t('手動輸入')}"><span>${esc(meta.baseCur)}</span><span id="base-eq" class="num"></span>`);
+  if (form.type === 'transfer' && form.to && acctCur(form.to) !== cur) parts.push(`<label for="f-toamt">${t('轉入金額 ({c})', { c: esc(acctCur(form.to)) })}</label><input class="field num" id="f-toamt" type="number" inputmode="decimal" step="any" min="0" value="${esc(form.toAmt)}">`);
+  return `<div class="extra" id="dyn-extra"${parts.length ? '' : ' hidden'}>${parts.join('')}</div>`;
+}
+function streak() {
+  const days = new Set(allTx().map(x => x.date)); let d = today(); if (!days.has(d)) d = addDays(d, -1);
+  let n = 0; while (days.has(d) && n < 3650) { n++; d = addDays(d, -1); } return n;
+}
+function todayLine() {
+  const td = today(); const list = monthTx(td.slice(0, 7)).filter(x => x.date === td);
+  const s = streak();
+  return t('今天 {n} 筆 · 支出 {v}', { n: list.length, v: `<span class="num">${fmt(sums(list).exp)}</span>` }) + (s >= 2 ? '　' + t('連續記帳 {n} 天', { n: s }) : '');
+}
+function budgetStrip() {
+  const ym = today().slice(0, 7); const s = monthBudgetState(ym, form.type === 'expense' ? form.cat : null);
+  const useCat = form.type === 'expense' && s.catLimit;
+  const spent = useCat ? s.catSpent : s.total, lim = useCat ? s.catLimit : s.totalLimit;
+  if (!lim) return `<div class="budstrip" id="dyn-bud"><div class="bud-top"><span>${t('本月支出')}</span><span class="num">${fmt(s.total)}</span></div></div>`;
+  const p = spent / lim; const label = useCat ? t('{c}預算', { c: catName('expense', form.cat) }) : t('本月預算');
+  return `<div class="budstrip" id="dyn-bud"><div class="bud-top"><span>${esc(label)}</span><span class="num ${p > 1 ? 'exp' : ''}">${p > 1 ? t('超支 {v}', { v: fmt(spent - lim) }) : t('剩 {v}', { v: fmt(lim - spent) })} / ${fmt(lim)}</span></div><div class="track"><i class="${p > 1 ? 'over' : p >= .8 ? 'warn' : ''}" style="width:${Math.min(p, 1) * 100}%"></i></div></div>`;
+}
+function tagChips() {
+  const tags = allTags().sort((a, b) => b.lastTs - a.lastTs).slice(0, 10);
+  if (!tags.length) return `<div class="tagchips" id="dyn-tags" hidden></div>`;
+  const cur = parseTags(form.note);
+  return `<div class="tagchips" id="dyn-tags" role="group" aria-label="${t('常用標籤')}">${tags.map(g => `<button type="button" class="chip" data-tag="${esc(g.tag)}" aria-pressed="${cur.includes(g.tag)}">#${esc(g.tag)}</button>`).join('')}</div>`;
+}
+function viewAdd() {
+  const edit = form.editId ? `<div class="editbar"><span>${t('正在編輯一筆記錄')}</span><span class="btns">
+      <button type="button" class="btn sm" data-act="make-rec">${t('設為每月固定')}</button>
+      <button type="button" class="btn sm danger" data-act="del">${t(form.delArm ? '確定刪除' : '刪除')}</button>
+      <button type="button" class="btn sm" data-act="cancel-edit">${t('取消')}</button></span></div>` : '';
+  const acctSel = form.type === 'transfer' ? '' : `<select class="field" id="f-acct" aria-label="${t('帳戶')}">${acctOptions(form.acct)}</select>`;
+  return `<section class="entry">
+    <div class="entry-head">
+      <div class="seg" role="group" aria-label="${t('類型')}">${['expense', 'income', 'transfer'].map(k => `<button type="button" data-t="${k}" aria-pressed="${form.type === k}">${typeName(k)}</button>`).join('')}</div>
+      <span class="today" id="dyn-today">${todayLine()}</span>
+    </div>
+    ${edit}
+    ${budgetStrip()}
+    ${catGrid()}
+    <div class="amount" id="amount" data-t="${form.type}"><div class="amt-cat" id="amt-cat"></div><div class="amt-num" aria-live="polite"><div class="expr num"></div><div class="val num"></div></div></div>
+    ${extraRow()}
+    <div class="fields">
+      ${acctSel}
+      <div class="datebox${form.type === 'transfer' ? ' wide' : ''}"><input class="field" type="date" id="f-date" value="${esc(form.date)}" aria-label="${t('日期')}"></div>
+      <input class="field note wide" id="f-note" placeholder="${esc(t('備註，可加 #標籤（例如 #日本旅遊）'))}" value="${esc(form.note)}" maxlength="120" autocomplete="off">
+    </div>
+    ${tagChips()}
+    <div class="pad" id="pad">
+      ${['7', '8', '9', 'back', '4', '5', '6', '+', '1', '2', '3', '-', '.', '0', '00'].map(k => {
+        const op = k === 'back' || k === '+' || k === '-';
+        return `<button type="button" data-k="${k}" class="${op ? 'op' : ''}" aria-label="${k === 'back' ? t('刪除一位') : k === '-' ? t('減') : k === '+' ? t('加') : k}">${k === 'back' ? '⌫' : k === '-' ? '−' : k}</button>`;
+      }).join('')}
+      <button type="button" class="save" data-k="save">${t(form.editId ? '更新' : '儲存')}</button>
+    </div>
+  </section>`;
+}
+function refreshAdd() {
+  const swap = (id, html) => { const el = document.getElementById(id); if (el) el.outerHTML = html; };
+  swap('dyn-cats', catGrid()); swap('dyn-bud', budgetStrip()); swap('dyn-tags', tagChips());
+  if (document.activeElement?.id !== 'f-rate' && document.activeElement?.id !== 'f-toamt') swap('dyn-extra', extraRow());
+  const el = document.getElementById('dyn-today'); if (el) el.innerHTML = todayLine();
+  const a = document.getElementById('f-acct'); if (a) a.innerHTML = acctOptions(form.acct);
+  updateAmount();
+}
+
+function txRow(x) {
+  let badge, title, sub, cls, sign;
+  if (x.type === 'transfer') {
+    badge = `<span class="badge" style="--c:var(--xfer)">${icon('transfer')}</span>`; title = typeName('transfer'); sub = esc(`${acctName(x.acct)} → ${acctName(x.to)}`); cls = 'xfer'; sign = '';
+  } else {
+    const c = findCat(x.type, x.cat); title = catName(x.type, x.cat);
+    badge = `<span class="badge" style="--c:${catColor(c)}">${c ? glyph(c.id, title) : initial(title)}</span>`; sub = esc(acctName(x.acct));
+    cls = x.type === 'expense' ? 'exp' : 'inc'; sign = x.type === 'expense' ? '-' : '+';
+  }
+  if (x.rid) sub += ' · ' + t('固定');
+  if (x.note) sub += ' · ' + esc(x.note);
+  if (x.tags?.length) sub += ' ' + x.tags.map(g => `<em>#${esc(g)}</em>`).join(' ');
+  let amt = `${sign}${fmtC(x.amount, x.cur)}`;
+  if (x.cur && x.cur !== meta.baseCur && x.type !== 'transfer') amt += `<small>≈ ${fmt(val(x))}</small>`;
+  if (x.type === 'transfer' && x.toAmount != null) amt += `<small>→ ${fmtC(x.toAmount, acctCur(x.to))}</small>`;
+  return `<li><button type="button" class="row" data-edit="${esc(x.id)}" data-ym="${esc(x.date.slice(0, 7))}">${badge}<span class="mid"><b>${esc(title)}</b><small>${sub}</small></span><span class="amt ${cls}">${amt}</span></button></li>`;
+}
+function groupByDay(list) {
+  const g = new Map();
+  for (const x of sortTx(list)) { if (!g.has(x.date)) g.set(x.date, []); g.get(x.date).push(x); }
+  return [...g].map(([d, items]) => {
+    const s = sums(items);
+    return `<div class="day"><div class="day-head"><span>${esc(dayLabel(d))}${d.slice(0, 4) !== today().slice(0, 4) ? ' · ' + d.slice(0, 4) : ''}</span><span class="num">${s.inc ? t('收 {v}', { v: fmt(s.inc) }) + '　' : ''}${s.exp ? t('支 {v}', { v: fmt(s.exp) }) : ''}</span></div>
+      <ul class="rows card">${items.map(txRow).join('')}</ul></div>`;
+  }).join('');
+}
+function monthBar(ym, key) {
+  return `<div class="monthbar"><button type="button" class="iconbtn" data-mon="${key}" data-d="-1" aria-label="${t('上個月')}">‹</button><strong>${esc(ymLabel(ym))}</strong><button type="button" class="iconbtn" data-mon="${key}" data-d="1" aria-label="${t('下個月')}">›</button></div>`;
+}
+function totalsCard(s) {
+  return `<div class="totals"><div class="tile inc"><span><i></i>${t('收入')}</span><b>${fmt(s.inc)}</b></div><div class="tile exp"><span><i></i>${t('支出')}</span><b>${fmt(s.exp)}</b></div><div class="tile net"><span><i></i>${t('結餘')}</span><b>${fmt(s.net)}</b></div></div>`;
+}
+function viewList() {
+  const ym = ui.listMonth ||= today().slice(0, 7);
+  const q = ui.q.trim().toLowerCase();
+  let body;
+  if (q) {
+    const words = q.split(/\s+/);
+    const hits = allTx().filter(x => {
+      const hay = [x.note, x.amount, x.date, acctName(x.acct), x.to ? acctName(x.to) : '', x.cat ? catName(x.type, x.cat) : '', findCat(x.type, x.cat)?.name || '', typeName(x.type), x.cur || '', ...(x.tags || []).map(g => '#' + g)].join(' ').toLowerCase();
+      return words.every(w => hay.includes(w));
+    });
+    body = `<p class="hint" style="margin-top:10px">${t('在所有月份找到 {n} 筆', { n: hits.length })}</p>${totalsCard(sums(hits))}${groupByDay(hits) || `<div class="empty">${t('沒有符合的記錄')}</div>`}`;
+  } else {
+    const list = monthTx(ym);
+    body = monthBar(ym, 'list') + summaryRing(sums(list)) + (groupByDay(list) || `<div class="empty">${icon('receipt')}${t('這個月還沒有記錄。<br>到「記一筆」輸入金額、選分類，按儲存即可。')}</div>`);
+  }
+  return `<input class="field search" id="f-q" type="search" placeholder="${esc(t('搜尋備註、分類、帳戶、金額或 #標籤'))}" value="${esc(ui.q)}" autocomplete="off">${body}`;
+}
+
+function donut(items, total) {
+  const R = 54, C = 2 * Math.PI * R; let off = 0;
+  const segs = items.map(it => { const len = (it.v / total) * C; const s = `<circle r="${R}" cx="80" cy="80" fill="none" stroke="${it.color}" stroke-width="22" stroke-dasharray="${Math.max(len - (items.length > 1 ? 1.5 : 0), 0.01)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)"/>`; off += len; return s; }).join('');
+  return `<svg viewBox="0 0 160 160" role="img" aria-label="${t('分類占比圓餅圖')}">
+    <circle r="${R}" cx="80" cy="80" fill="none" stroke="var(--sunk)" stroke-width="22"/>${segs}
+    <text x="80" y="76" text-anchor="middle" style="font-size:9px;fill:var(--muted);font-family:var(--font-ui)">${esc(t('{t}合計', { t: typeName(ui.statsType) }))}</text>
+    <text x="80" y="94" text-anchor="middle" style="font-size:14px;fill:var(--fg);font-weight:600">${esc(fmt(total))}</text></svg>`;
+}
+function niceMax(v) { if (v <= 0) return 100; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p; return 10 * p; }
+const short = v => lang === 'en' ? (v >= 1000 ? round2(v / 1000) + 'k' : String(round2(v))) : v >= 10000 ? round2(v / 10000) + (lang === 'zh-CN' ? '万' : '萬') : String(round2(v));
+function dailyChart(ym, type) {
+  const n = daysIn(ym); const vals = Array(n).fill(0);
+  for (const x of monthTx(ym)) if (x.type === type) vals[Number(x.date.slice(8)) - 1] += val(x);
+  const max = niceMax(Math.max(...vals)); const W = 320, H = 140, L = 34, B = 18, T = 8;
+  const bw = (W - L - 4) / n; const y = v => T + (H - T - B) * (1 - v / max);
+  const color = type === 'expense' ? 'var(--exp)' : 'var(--inc)';
+  const td = today(); const isCur = td.slice(0, 7) === ym;
+  let g = [0, .5, 1].map(f => `<line class="grid" x1="${L}" x2="${W}" y1="${y(max * f)}" y2="${y(max * f)}"/><text x="${L - 4}" y="${y(max * f) + 3}" text-anchor="end">${short(max * f)}</text>`).join('');
+  g += vals.map((v, i) => v > 0 ? `<rect x="${L + 2 + i * bw + bw * .15}" y="${y(v)}" width="${bw * .7}" height="${H - B - y(v)}" rx="1.5" fill="${color}"><title>${esc(t('{d}日 {v}', { d: i + 1, v: fmt(v) }))}</title></rect>` : '').join('');
+  g += [1, 5, 10, 15, 20, 25, n].map(d => `<text x="${L + 2 + (d - .5) * bw}" y="${H - 4}" text-anchor="middle">${d}</text>`).join('');
+  if (isCur) { const d = Number(td.slice(8)); g += `<line x1="${L + 2 + (d - .5) * bw}" x2="${L + 2 + (d - .5) * bw}" y1="${T}" y2="${H - B}" stroke="var(--accent)" stroke-dasharray="2 3"/>`; }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t('每日{t}', { t: typeName(type) }))}">${g}</svg>`;
+}
+// Category detail sheet (opened from the stats legend): totals, change vs last month, 6-month bars and this month's records.
+function openCatSheet(type, catId, pr) {
+  const ym = pr.ym;
+  const c = findCat(type, catId); const name = catName(type, catId); const color = catColor(c);
+  const of = m => monthTx(m).filter(x => x.type === type && x.cat === catId);
+  const inRange = txIn(pr);
+  const list = inRange.filter(x => x.type === type && x.cat === catId);
+  const total = round2(list.reduce((a, x) => a + val(x), 0));
+  const monthTotal = sums(inRange)[type === 'expense' ? 'exp' : 'inc'];
+  const pct = monthTotal ? Math.round(total / monthTotal * 1000) / 10 : 0;
+  const biggest = list.reduce((m, x) => !m || val(x) > val(m) ? x : m, null);
+  const ms = Array.from({ length: 6 }, (_, i) => addMonth(ym, i - 5));
+  const vals = ms.map(m => round2(of(m).reduce((a, x) => a + val(x), 0)));
+  const diff = round2(total - vals[4]);
+  const diffTxt = diff > 0 ? t('比上月多 {v}', { v: fmt(diff) }) : diff < 0 ? t('比上月少 {v}', { v: fmt(-diff) }) : t('與上月相同');
+  const max = niceMax(Math.max(...vals)); const W = 300, H = 104, B = 18, T = 16, gw = W / 6;
+  const y = v => T + (H - T - B) * (1 - v / max);
+  const bars = vals.map((v, i) => {
+    const x = i * gw, cur = i === 5;
+    return `${v ? `<rect x="${x + gw * .26}" y="${y(v)}" width="${gw * .48}" height="${H - B - y(v)}" rx="3" fill="${color}" opacity="${cur ? 1 : .45}"><title>${esc(ymLabel(ms[i]))} ${fmt(v)}</title></rect>` : ''}
+      ${cur && v ? `<text x="${x + gw / 2}" y="${y(v) - 4}" text-anchor="middle" style="fill:var(--fg);font-weight:600">${short(v)}</text>` : ''}
+      <text x="${x + gw / 2}" y="${H - 4}" text-anchor="middle"${cur ? ' style="fill:var(--fg);font-weight:600"' : ''}>${esc(monthShort(ms[i]))}</text>`;
+  }).join('');
+  const lim = type === 'expense' ? Number(meta.budgets.cats[catId]) || 0 : 0;
+  const panel = document.getElementById('sheet-panel');
+  panel.innerHTML = `<div class="sheet-grip"></div>
+    <div class="sh-head"><span class="badge" style="--c:${color}">${c ? glyph(c.id, name) : initial(name)}</span>
+      <span class="mid"><h3 id="sheet-title">${esc(name)}</h3><small>${esc(pr.label)} · ${esc(typeName(type))}</small></span>
+      <button type="button" class="iconbtn" data-close="1" aria-label="${t('關閉')}">✕</button></div>
+    <div class="sh-total num ${type === 'expense' ? 'exp' : 'inc'}">${fmt(total)}</div>
+    <div class="sh-diff">${pr.isMonth ? `${esc(t('佔本月{t} {p}%', { t: typeName(type), p: pct }))} · ${esc(diffTxt)}` : esc(t('佔期間{t} {p}%', { t: typeName(type), p: pct }))}</div>
+    <div class="sh-stats">
+      <div><span>${t('筆數')}</span><b>${list.length}</b></div>
+      <div><span>${t('平均每筆')}</span><b>${fmt(list.length ? total / list.length : 0)}</b></div>
+      <div><span>${t('最大一筆')}</span><b>${biggest ? fmt(val(biggest)) : '—'}</b></div>
+    </div>
+    ${lim ? `<div class="card budlist" style="margin-top:10px">${budgetRow(t('{c}預算', { c: name }), total, lim)}</div>` : ''}
+    <h2>${t('近 6 個月')}</h2><div class="card chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t('近 6 個月'))}">${bars}</svg></div>
+    <h2>${t(pr.isMonth ? '這個月的記錄' : '期間內的記錄')}</h2>${groupByDay(list) || `<div class="empty">${t('沒有符合的記錄')}</div>`}`;
+  const sheet = document.getElementById('sheet');
+  sheet.hidden = false;
+  panel.scrollTop = 0;
+  panel.querySelector('.iconbtn').focus();
+}
+function closeSheet() { const s = document.getElementById('sheet'); if (!s.hidden) { s.hidden = true; } }
+document.getElementById('sheet').addEventListener('click', e => {
+  if (e.target.closest('[data-close]')) { closeSheet(); return; }
+  const r = e.target.closest('[data-edit]');
+  if (r) { const x = months[r.dataset.ym]?.[r.dataset.edit]; closeSheet(); if (x) startEdit(x); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+// Records page summary: the ring's track is the month's income, the red arc is how much of it was spent; net sits in the middle.
+function summaryRing(s) {
+  const R = 49, C = 2 * Math.PI * R;
+  const ratio = s.inc > 0 ? s.exp / s.inc : (s.exp > 0 ? 1 : 0);
+  const len = Math.min(ratio, 1) * C;
+  const track = s.inc > 0 ? 'var(--ring-in)' : 'var(--sunk)';
+  const net = fmt(s.net);
+  return `<div class="sumring">
+    <div class="ringbox">
+      <svg viewBox="0 0 120 120" role="img" aria-label="${esc(t('收支比例'))}">
+        <circle cx="60" cy="60" r="${R}" fill="none" style="stroke:${track}" stroke-width="20"/>
+        ${len > 0 ? `<circle cx="60" cy="60" r="${R}" fill="none" style="stroke:var(--ring-out)" stroke-width="20" stroke-linecap="${ratio >= 1 ? 'butt' : 'round'}" stroke-dasharray="${len} ${C}" transform="rotate(-90 60 60)"/>` : ''}
+      </svg>
+      <div class="rc"><button type="button" class="rc-link" data-act="to-stats" aria-label="${esc(t('結餘') + ' · ' + t('統計'))}">${t('結餘')}${icon('eye')}</button><b class="num ${s.net < 0 ? 'exp' : ''}" style="font-size:${net.length > 10 ? 17 : net.length > 8 ? 20 : 24}px">${net}</b></div>
+    </div>
+  </div>`;
+}
+function trendChart(endYm) {
+  const ms = Array.from({ length: 12 }, (_, i) => addMonth(endYm, i - 11));
+  const data = ms.map(m => sums(monthTx(m)));
+  const max = niceMax(Math.max(...data.map(d => Math.max(d.inc, d.exp))));
+  const W = 320, H = 150, L = 34, B = 18, T = 8; const gw = (W - L - 4) / 12; const y = v => T + (H - T - B) * (1 - v / max);
+  let g = [0, .5, 1].map(f => `<line class="grid" x1="${L}" x2="${W}" y1="${y(max * f)}" y2="${y(max * f)}"/><text x="${L - 4}" y="${y(max * f) + 3}" text-anchor="end">${short(max * f)}</text>`).join('');
+  data.forEach((d, i) => {
+    const x = L + 2 + i * gw; const bw = gw * .34;
+    if (d.inc) g += `<rect x="${x + gw * .14}" y="${y(d.inc)}" width="${bw}" height="${H - B - y(d.inc)}" rx="1.5" fill="var(--inc)"><title>${esc(ymLabel(ms[i]))} ${t('收入')} ${fmt(d.inc)}</title></rect>`;
+    if (d.exp) g += `<rect x="${x + gw * .52}" y="${y(d.exp)}" width="${bw}" height="${H - B - y(d.exp)}" rx="1.5" fill="var(--exp)"><title>${esc(ymLabel(ms[i]))} ${t('支出')} ${fmt(d.exp)}</title></rect>`;
+    g += `<text x="${x + gw / 2}" y="${H - 4}" text-anchor="middle"${ms[i] === endYm ? ' style="fill:var(--fg);font-weight:600"' : ''}>${esc(monthShort(ms[i]))}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${t('近 12 個月收支趨勢')}">${g}</svg>`;
+}
+function budgetRow(label, spent, lim) {
+  const p = lim ? spent / lim : 0;
+  return `<div class="bud"><div class="bud-top"><span>${esc(label)}</span><span class="num">${fmt(spent)} / ${fmt(lim)}</span></div>
+    <div class="track"><i class="${p > 1 ? 'over' : p >= .8 ? 'warn' : ''}" style="width:${Math.min(p, 1) * 100}%"></i></div>
+    <small class="${p > 1 ? 'exp' : ''}">${p > 1 ? t('超支 {v}', { v: fmt(spent - lim) }) : t('剩 {v}，已用 {p}%', { v: fmt(lim - spent), p: Math.round(p * 100) })}</small></div>`;
+}
+// Period for the category share chart: the stats month, the 6 or 12 months ending at it, or a custom date range.
+const PIE_RANGES = { month: '本月', '6m': '半年', '1y': '一年', custom: '自訂' };
+function pieRange() {
+  const ym = ui.statsMonth || today().slice(0, 7);
+  const end = `${ym}-${pad2(daysIn(ym))}`;
+  if (ui.pieRange === '6m' || ui.pieRange === '1y') {
+    const s = addMonth(ym, ui.pieRange === '6m' ? -5 : -11);
+    return { from: s + '-01', to: end, label: t('{a} 至 {b}', { a: ymLabel(s), b: ymLabel(ym) }), isMonth: false, ym };
+  }
+  if (ui.pieRange === 'custom') {
+    let f = ui.pieFrom || ym + '-01', e = ui.pieTo || today();
+    if (f > e) [f, e] = [e, f];
+    return { from: f, to: e, label: t('{a} 至 {b}', { a: f, b: e }), isMonth: false, ym };
+  }
+  return { from: ym + '-01', to: end, label: ymLabel(ym), isMonth: true, ym };
+}
+const txIn = r => allTx().filter(x => x.date >= r.from && x.date <= r.to);
+function rangeBar(pr) {
+  const seg = `<div class="seg rangeseg" role="group" aria-label="${t('期間')}">${Object.entries(PIE_RANGES).map(([k, v]) => `<button type="button" data-pr="${k}" aria-pressed="${(ui.pieRange || 'month') === k}">${t(v)}</button>`).join('')}</div>`;
+  const custom = ui.pieRange === 'custom' ? `<div class="rangedates"><input class="field" type="date" id="p-from" value="${esc(pr.from)}" aria-label="${t('開始日期')}"><span>–</span><input class="field" type="date" id="p-to" value="${esc(pr.to)}" aria-label="${t('結束日期')}"></div>` : '';
+  return `<div class="rangebar">${seg}${custom}${ui.pieRange && ui.pieRange !== 'month' && ui.pieRange !== 'custom' ? `<p class="hint" style="margin:0">${esc(pr.label)}</p>` : ''}</div>`;
+}
+function viewStats() {
+  const ym = ui.statsMonth ||= today().slice(0, 7);
+  const type = ui.statsType; const list = monthTx(ym);
+  const pr = pieRange();
+  const by = {};
+  for (const x of txIn(pr)) if (x.type === type) by[x.cat] = (by[x.cat] || 0) + val(x);
+  const total = round2(Object.values(by).reduce((a, b) => a + b, 0));
+  const items = Object.entries(by).map(([id, v]) => { const c = findCat(type, id); return { id, v: round2(v), name: catName(type, id), color: catColor(c) }; }).sort((a, b) => b.v - a.v);
+  const pie = total > 0 ? `<div class="piebox">${donut(items, total)}</div>
+    <ul class="legend card" style="margin-top:8px">${items.map(it => `<li><button type="button" class="lg-btn" data-catsheet="${esc(it.id)}"><span class="badge" style="--c:${it.color};width:28px;height:28px;font-size:13px">${findCat(type, it.id) ? glyph(it.id, it.name) : initial(it.name)}</span><span class="mid"><div><span>${esc(it.name)}</span><span class="num">${fmt(it.v)}　<span class="muted">${(it.v / total * 100).toFixed(1)}%</span></span></div><span class="bar" style="--c:${it.color};width:${it.v / items[0].v * 100}%"></span></span><span class="chev" aria-hidden="true">›</span></button></li>`).join('')}</ul>`
+    : `<div class="empty card">${esc(t('{m}沒有{t}記錄', { m: pr.label, t: typeName(type) }))}</div>`;
+  const b = meta.budgets; const expList = list.filter(x => x.type === 'expense');
+  const budCats = Object.entries(b.cats).filter(([id, v]) => Number(v) > 0 && findCat('expense', id));
+  const budget = (b.total || budCats.length) ? `<h2>${t('預算')}</h2><div class="card budlist">${b.total ? budgetRow(t('本月總預算'), sums(expList).exp, b.total) : ''}${budCats.map(([id, lim]) => budgetRow(catName('expense', id), round2(expList.filter(x => x.cat === id).reduce((a, x) => a + val(x), 0)), Number(lim))).join('')}</div>`
+    : `<h2>${t('預算')}</h2><div class="card section-body"><p class="muted">${t('還沒有設定預算。到「設定 → 預算」填每月總額或分類上限，超支時記帳畫面會提醒你。')}</p></div>`;
+  const tags = allTags().sort((a, b) => (b.exp + b.inc) - (a.exp + a.inc));
+  const tagSec = tags.length ? `<h2>${t('標籤（全部期間）')}</h2><div class="card taglist">${tags.map(g => `<button type="button" data-tagq="${esc(g.tag)}"><b>#${esc(g.tag)}</b><span class="num muted" style="font-size:13px">${t('{n} 筆', { n: g.n })}${g.exp ? ` · ${t('支 {v}', { v: fmt(g.exp) })}` : ''}${g.inc ? ` · ${t('收 {v}', { v: fmt(g.inc) })}` : ''}</span></button>`).join('')}</div>` : '';
+  return monthBar(ym, 'stats') + totalsCard(sums(list)) + budget +
+    `<h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">${t('分類占比')}<span class="seg" role="group" aria-label="${t('統計類型')}">${['expense', 'income'].map(k => `<button type="button" data-st="${k}" data-t="${k}" aria-pressed="${type === k}">${typeName(k)}</button>`).join('')}</span></h2>` + rangeBar(pr) + pie +
+    `<h2>${esc(t('每日{t}', { t: typeName(type) }))}</h2><div class="card chart">${dailyChart(ym, type)}</div>
+     <h2>${t('近 12 個月趨勢')}</h2><div class="card"><div class="chart">${trendChart(ym)}</div><div class="chart-key"><span><i style="background:var(--inc)"></i>${t('收入')}</span><span><i style="background:var(--exp)"></i>${t('支出')}</span></div></div>
+     ${tagSec}
+     <p class="hint">${t('金額以 {b} 計，外幣用記帳當時的匯率換算。轉帳只在帳戶之間移動金額，不計入收入或支出。', { b: esc(meta.baseCur) })}</p>`;
+}
+
+function viewAccounts() {
+  const bal = balances();
+  const missing = new Set();
+  const net = meta.accounts.reduce((a, x) => { const r = rateOf(x.cur); if (!r) missing.add(x.cur); return a + (bal[x.id] || 0) * r; }, 0);
+  const counts = {}; for (const x of allTx()) { counts[x.acct] = (counts[x.acct] || 0) + 1; if (x.to) counts[x.to] = (counts[x.to] || 0) + 1; }
+  const typeOpts = sel => Object.entries(ACCT_TYPES).map(([k, v]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${t(v)}</option>`).join('');
+  const rows = meta.accounts.map((a, i) => {
+    const b = round2(bal[a.id] || 0);
+    const open = ui.openAcct === a.id;
+    const ed = open ? `<div class="editor">
+        <label class="full">${t('名稱')}<input class="field" id="a-name" value="${esc(nameOf(a))}" maxlength="20"></label>
+        <label>${t('類型')}<select class="field" id="a-type">${typeOpts(a.type)}</select></label>
+        <label>${t('幣別')}<select class="field" id="a-cur"${counts[a.id] ? ' disabled' : ''}>${curOptions(a.cur)}</select></label>
+        <label class="full">${t('期初餘額（{c}）', { c: esc(a.cur) })}<input class="field num" id="a-init" type="number" inputmode="decimal" step="any" value="${Number(a.init) || 0}"></label>
+        <div class="actions">
+          <button type="button" class="btn primary sm" data-acct-save="${esc(a.id)}">${t('儲存')}</button>
+          <button type="button" class="btn sm" data-acct-move="${esc(a.id)}" data-d="-1"${i === 0 ? ' disabled' : ''}>${t('上移')}</button>
+          <button type="button" class="btn sm" data-acct-move="${esc(a.id)}" data-d="1"${i === meta.accounts.length - 1 ? ' disabled' : ''}>${t('下移')}</button>
+          <button type="button" class="btn sm" data-acct-list="${esc(a.id)}">${t('看明細')}</button>
+          ${counts[a.id] ? `<span class="muted" style="font-size:12px;align-self:center">${t('有 {n} 筆記錄，無法刪除或改幣別', { n: counts[a.id] })}</span>` : `<button type="button" class="btn sm danger" data-acct-del="${esc(a.id)}">${t(ui.confirm === 'acct:' + a.id ? '確定刪除' : '刪除')}</button>`}
+        </div>
+        <p class="muted full" style="font-size:12px;margin:0">${t('信用卡的期初餘額填尚未繳的卡費，用負數，例如 -3500。')}</p>
+      </div>` : '';
+    const foreign = a.cur !== meta.baseCur;
+    return `<div class="acct"><div class="acct-line"><span class="badge" style="--c:${ACCT_COLORS[a.type] || ACCT_COLORS.other}">${icon('t_' + (ICON_PATHS['t_' + a.type] ? a.type : 'other'))}</span>
+      <span class="mid"><b>${esc(nameOf(a))}</b><small>${t(ACCT_TYPES[a.type] || '其他')}${foreign ? ' · ' + esc(a.cur) : ''} · ${t('{n} 筆', { n: counts[a.id] || 0 })}</small></span>
+      <span class="bal ${b < 0 ? 'exp' : ''}">${fmtC(b, a.cur)}${foreign && rateOf(a.cur) ? `<small class="muted">≈ ${fmt(b * rateOf(a.cur))}</small>` : ''}</span>
+      <button type="button" class="btn sm" data-acct-open="${esc(a.id)}" aria-expanded="${open}">${t(open ? '收起' : '編輯')}</button></div>${ed}</div>`;
+  }).join('');
+  return `<div class="networth card" style="margin-top:6px"><span>${t('淨資產（所有帳戶換算 {b} 加總）', { b: esc(meta.baseCur) })}</span><b class="num ${net < 0 ? 'exp' : ''}">${fmt(net)}</b>${missing.size ? `<span class="exp">${t('未計入 {c}：請到「設定 → 幣別與匯率」填匯率', { c: [...missing].join(', ') })}</span>` : ''}</div>
+    <h2>${t('帳戶')}</h2><div class="card">${rows || `<div class="empty">${t('還沒有帳戶')}</div>`}
+      <div class="addrow"><input class="field" id="a-new" placeholder="${esc(t('新增帳戶，例如：郵局、日幣現金'))}" maxlength="20"><select class="field" id="a-new-type" aria-label="${t('類型')}">${typeOpts('cash')}</select><select class="field" id="a-new-cur" aria-label="${t('幣別')}">${curOptions(meta.baseCur)}</select><button type="button" class="btn primary" data-act="acct-add">${t('新增')}</button></div></div>
+    <p class="hint">${t('餘額 = 期初餘額 + 收入 − 支出 ± 轉帳，以帳戶本身的幣別計。提款、繳卡費、儲值、換匯請用「轉帳」記錄。')}</p>`;
+}
+
+function viewSettings() {
+  const cats = meta.cats[ui.catType];
+  const used = new Set(allTx().filter(x => x.type === ui.catType).map(x => x.cat));
+  const catRows = cats.map((c, i) => `<div class="catrow">
+      <button type="button" class="badge" style="--c:${catColor(c)}" data-cat-color="${esc(c.id)}" aria-label="${t('換顏色')}">${glyph(c.id, nameOf(c))}</button>
+      <input class="field" data-cat-name="${esc(c.id)}" value="${esc(nameOf(c))}" maxlength="12" aria-label="${t('分類名稱')}">
+      <button type="button" class="iconbtn" data-cat-move="${esc(c.id)}" data-d="-1" aria-label="${t('上移')}"${i === 0 ? ' disabled' : ''}>↑</button>
+      <button type="button" class="iconbtn" data-cat-move="${esc(c.id)}" data-d="1" aria-label="${t('下移')}"${i === cats.length - 1 ? ' disabled' : ''}>↓</button>
+      <button type="button" class="btn sm danger" data-cat-del="${esc(c.id)}">${ui.confirm === 'cat:' + c.id ? t(used.has(c.id) ? '仍要刪除' : '確定') : t('刪除')}</button>
+    </div>`).join('');
+  const lb = meta.lastBackup ? new Date(meta.lastBackup) : null;
+  const stale = !lb || (Date.now() - lb.getTime()) > 30 * 864e5;
+  const storeNote = mode === 'cloud'
+    ? `<p>${t('資料存在雲端，用同一個帳號在手機或電腦登入，資料會自動同步。')}</p>`
+    : mode === 'local'
+      ? `<div class="notice warn">${t('目前無法連上雲端，資料只存在這台裝置的瀏覽器。清除瀏覽資料就會消失，請常匯出備份。')}</div>`
+      : `<p>${t('正在連線…')}</p>`;
+  const confirmDelMsg = ui.confirm && ui.confirm.startsWith('cat:') && used.has(ui.confirm.slice(4)) ? `<div class="notice warn" style="margin:8px 12px 0">${t('這個分類已有記錄，刪除後那些記錄會顯示為「未分類」，金額不受影響。')}</div>` : '';
+
+  // budgets
+  const thisYm = today().slice(0, 7); const expNow = monthTx(thisYm).filter(x => x.type === 'expense');
+  const budRows = meta.cats.expense.map(c => {
+    const spent = round2(expNow.filter(x => x.cat === c.id).reduce((a, x) => a + val(x), 0));
+    return `<div class="catrow"><span class="badge" style="--c:${catColor(c)}">${glyph(c.id, nameOf(c))}</span><span class="mid"><span>${esc(nameOf(c))}</span><small class="num">${t('本月 {v}', { v: fmt(spent) })}</small></span>
+      <input class="field num budin" type="number" inputmode="decimal" min="0" step="any" data-bud="${esc(c.id)}" value="${Number(meta.budgets.cats[c.id]) || ''}" placeholder="${t('不限')}" aria-label="${esc(t('{c}每月預算', { c: nameOf(c) }))}"></div>`;
+  }).join('');
+
+  // recurring
+  const rt = ui.recType;
+  const recRows = meta.recurring.map(r => {
+    const what = r.type === 'transfer' ? `${acctName(r.acct)} → ${acctName(r.to)}` : `${catName(r.type, r.cat)} · ${acctName(r.acct)}`;
+    const sign = r.type === 'expense' ? '-' : r.type === 'income' ? '+' : '';
+    return `<div class="catrow"><span class="mid"><span>${esc(r.note || what)}${r.tags?.length ? ' ' + r.tags.map(g => `<span style="color:var(--accent)">#${esc(g)}</span>`).join(' ') : ''}</span>
+      <small>${esc(freqText(r))} · ${esc(what)} · ${r.active ? esc(t('下次 {d}', { d: r.next })) : t('已暫停')}</small></span>
+      <span class="num ${r.type === 'expense' ? 'exp' : r.type === 'income' ? 'inc' : 'xfer'}" style="font-weight:600;white-space:nowrap">${sign}${fmtC(r.amount, acctCur(r.acct))}</span>
+      <button type="button" class="btn sm" data-rec-toggle="${esc(r.id)}">${t(r.active ? '暫停' : '恢復')}</button>
+      <button type="button" class="btn sm danger" data-rec-del="${esc(r.id)}">${t(ui.confirm === 'rec:' + r.id ? '確定' : '刪除')}</button></div>`;
+  }).join('');
+  const recForm = `<div class="section-body" style="border-top:1px solid var(--line)">
+      <div class="seg" role="group" aria-label="${t('週期帳目類型')}">${['expense', 'income', 'transfer'].map(k => `<button type="button" data-rt="${k}" data-t="${k}" aria-pressed="${rt === k}">${typeName(k)}</button>`).join('')}</div>
+      <div class="editor">
+        <label>${t('金額')}<input class="field num" id="r-amt" type="number" inputmode="decimal" min="0" step="any" placeholder="15000"></label>
+        ${rt === 'transfer'
+          ? `<label>${t('轉出帳戶')}<select class="field" id="r-acct">${acctOptions(last.transfer.acct)}</select></label><label>${t('轉入帳戶')}<select class="field" id="r-to">${acctOptions(last.transfer.to)}</select></label>`
+          : `<label>${t('分類')}<select class="field" id="r-cat">${meta.cats[rt].map(c => `<option value="${esc(c.id)}">${esc(nameOf(c))}</option>`).join('')}</select></label><label>${t('帳戶')}<select class="field" id="r-acct">${acctOptions(last[rt].acct)}</select></label>`}
+        <label>${t('頻率')}<select class="field" id="r-freq">${Object.entries(FREQ_LABEL).map(([k, v]) => `<option value="${k}">${t(v)}</option>`).join('')}</select></label>
+        <label>${t('第一次日期')}<input class="field" id="r-start" type="date" value="${today()}"></label>
+        <label${rt === 'transfer' ? '' : ' class="full"'}>${t('名稱 / 備註')}<input class="field" id="r-note" placeholder="${esc(t(rt === 'income' ? '薪水' : rt === 'transfer' ? '繳卡費' : '房租、Netflix') + '  ' + t('可加 #標籤'))}" maxlength="60"></label>
+        <div class="actions"><button type="button" class="btn primary" data-act="rec-add">${t('新增週期帳目')}</button></div>
+      </div>
+      <p class="muted" style="font-size:12px">${t('每次打開 app 時，會自動補記到期的帳目（包含今天）。之後刪掉自動記入的某一筆，不會再被補回來。')}</p>
+    </div>`;
+
+  // currencies in use
+  const foreign = [...new Set(meta.accounts.map(a => a.cur).filter(c => c !== meta.baseCur))];
+  const hasTx = allTx().length > 0;
+  const rateRows = foreign.map(c => `<div class="catrow"><span class="mid"><span>1 ${esc(c)} ${esc(curName(c))}</span><small>${rateOf(c) ? '' : t('還沒填匯率')}</small></span>
+      <input class="field num budin" type="number" inputmode="decimal" min="0" step="any" data-rate="${esc(c)}" value="${meta.rates[c] || ''}" placeholder="${t('匯率')}" aria-label="${esc(t('{c} 匯率', { c }))}"><span class="muted" style="font-size:13px">${esc(meta.baseCur)}</span></div>`).join('');
+
+  const S = {};
+  S.lang = `<div class="card"><div class="langs" role="group" aria-label="${t('語言')}">${Object.entries(LANGS).map(([k, v]) => `<button type="button" data-lang="${k}" lang="${k}" aria-pressed="${lang === k}">${v}</button>`).join('')}</div></div>
+    <p class="hint">${t('語言設定會同步到你的其他裝置。')}</p>`;
+  S.budget = `<div class="card">
+      <div class="catrow"><span class="mid"><b>${t('每月總預算')}</b><small class="num">${t('本月已花 {v}', { v: fmt(sums(expNow).exp) })}</small></span>
+        <input class="field num budin" type="number" inputmode="decimal" min="0" step="any" data-bud="__total" value="${meta.budgets.total || ''}" placeholder="${t('不限')}" aria-label="${t('每月總預算')}"></div>
+      <div style="border-top:1px solid var(--line)">${budRows}</div>
+    </div>
+    <p class="hint">${t('留空代表不設上限。記帳時用到 80% 和超支都會提醒，記帳畫面上方也會顯示剩餘額度。')}</p>`;
+  S.rec = `<div class="card">${recRows || `<p class="muted" style="padding:12px;margin:0;font-size:14px">${t('房租、訂閱、薪水這類固定收支設定一次，就會自動入帳。')}</p>`}${recForm}</div>
+    <p class="hint">${t('也可以在明細點開任一筆記錄，按「設為每月固定」。')}</p>`;
+  S.cats = `<div class="card">
+      <div style="padding:10px 12px 4px" class="seg" role="group" aria-label="${t('分類類型')}">${['expense', 'income'].map(k => `<button type="button" data-ct="${k}" data-t="${k}" aria-pressed="${ui.catType === k}">${esc(t('{t}分類', { t: typeName(k) }))}</button>`).join('')}</div>
+      ${confirmDelMsg}
+      <div style="margin-top:6px">${catRows}</div>
+      <div class="addrow"><input class="field" id="c-new" placeholder="${esc(t('新增{t}分類', { t: typeName(ui.catType) }))}" maxlength="12"><button type="button" class="btn primary" data-act="cat-add">${t('新增')}</button></div>
+    </div>
+    <p class="hint">${t('點圓圈換顏色，直接改名稱，用箭頭調整在記帳畫面的順序。')}</p>`;
+  S.cur = `<div class="card">
+      <div class="catrow"><span class="mid"><b>${t('主要幣別')}</b><small>${t('統計、預算、淨資產都用它計算')}${hasTx ? t('；已有記錄，不能再更改') : ''}</small></span>
+        <select class="field" id="s-base" style="width:auto;max-width:50%"${hasTx ? ' disabled' : ''}>${curOptions(meta.baseCur)}</select></div>
+      ${rateRows ? `<div style="border-top:1px solid var(--line)">${rateRows}</div>` : `<p class="muted" style="padding:0 12px 12px;margin:0;font-size:13px">${t('在「帳戶」新增外幣帳戶（例如日幣現金）後，這裡會出現匯率欄位。')}</p>`}
+    </div>
+    <p class="hint">${t('匯率需手動輸入，網頁無法自動抓即時匯率。每筆外幣記錄會保存記帳當時的匯率，之後改匯率只影響新記錄和淨資產換算。')}</p>`;
+  S.backup = `<div class="card section-body">
+      ${storeNote}
+      <p class="${stale ? 'exp' : 'muted'}" style="font-size:13px">${lb ? t('上次匯出備份：{d}', { d: lb.toLocaleDateString(loc()) }) : t('還沒有匯出過備份')}${stale ? t('，建議現在匯出一份') : ''}</p>
+      <div class="btnrow">
+        <button type="button" class="btn primary" data-act="export-json">${t('匯出完整備份 (JSON)')}</button>
+        <button type="button" class="btn" data-act="export-csv">${t('匯出明細 (CSV / Excel)')}</button>
+      </div>
+      ${ui.exportText ? `<div class="notice">${t('這裡無法直接下載檔案，請複製下面內容另存成 <b>{n}</b>。', { n: esc(ui.exportText.name) })}</div><textarea class="field" id="exp-text" readonly>${esc(ui.exportText.text)}</textarea><div class="btnrow"><button type="button" class="btn" data-act="copy-export">${t('複製')}</button><button type="button" class="btn" data-act="close-export">${t('關閉')}</button></div>` : ''}
+      <div style="border-top:1px solid var(--line);padding-top:10px;display:grid;gap:8px">
+        <p>${t('從備份還原：選擇之前匯出的 JSON 檔，記錄會合併進來，不會刪掉現有資料。')}</p>
+        <input type="file" id="f-import" accept=".json,application/json">
+        ${ui.importData ? `<div class="notice">${t('檔案內有 {n} 筆記錄、{a} 個帳戶。', { n: ui.importData.transactions.length, a: ui.importData.meta?.accounts?.length || 0 })}</div><div class="btnrow"><button type="button" class="btn primary" data-act="import-go">${t('合併匯入')}</button><button type="button" class="btn" data-act="import-cancel">${t('取消')}</button></div>` : ''}
+      </div>
+    </div>
+    <p class="hint">${t('共 {n} 筆記錄 · {a} 個帳戶 · {r} 個週期帳目', { n: allTx().length, a: meta.accounts.length, r: meta.recurring.length })}</p>`;
+  return settingsShell(S, stale, lb, foreign);
+}
+const SET_SECS = [['account', '帳號'], ['lang', '語言'], ['theme', '外觀'], ['budget', '預算'], ['rec', '週期性帳目'], ['cats', '分類'], ['cur', '幣別與匯率'], ['backup', '備份與同步']];
+function settingsShell(S, stale, lb, foreign) {
+  const prov = user?.app_metadata?.provider === 'google' ? 'Google' : 'Email';
+  S.account = `<div class="card section-body">
+      <div class="catrow" style="padding:0;border:0"><span class="badge" style="--c:${SEC_COLORS.account}">${icon('s_account')}</span><span class="mid"><b>${esc(user?.email || '')}</b><small>${t('登入方式：{p}', { p: prov })}</small></span></div>
+      <p class="muted" style="font-size:13px">${t('資料存在雲端資料庫，只有登入這個帳號才看得到。在其他裝置用同一個 email 或 Google 帳號登入即可同步。')}</p>
+      ${ui.confirm === 'logout' && failed.size ? `<div class="notice warn">${t('還有資料沒同步，現在登出會遺失這些變更。')}</div>` : ''}
+      <div class="btnrow"><button type="button" class="btn danger" data-act="logout">${t(ui.confirm === 'logout' ? '確定登出' : '登出')}</button></div>
+    </div>`;
+  S.theme = `<div class="card"><div class="langs" role="group" aria-label="${t('外觀')}">${Object.entries(THEMES).map(([k, v]) => `<button type="button" data-theme-opt="${k}" aria-pressed="${themePref === k}">${t(v)}</button>`).join('')}</div></div>
+    <p class="hint">${t('只套用在這台裝置。')}</p>`;
+  const sec = ui.setSec;
+  if (sec && S[sec]) {
+    const title = SET_SECS.find(s => s[0] === sec)[1];
+    return `<div class="subhead"><button type="button" class="iconbtn" data-act="set-back" aria-label="${t('返回')}">‹</button><span class="mi" style="--c:${SEC_COLORS[sec]}">${icon('s_' + sec)}</span><strong>${t(title)}</strong></div>${S[sec]}`;
+  }
+  const nCatBud = Object.values(meta.budgets.cats).filter(v => Number(v) > 0).length;
+  const bud = [meta.budgets.total ? t('每月 {v}', { v: fmt(meta.budgets.total) }) : '', nCatBud ? t('{n} 個分類上限', { n: nCatBud }) : ''].filter(Boolean).join(' · ');
+  const sum = {
+    account: user?.email || '',
+    lang: LANGS[lang],
+    theme: t(THEMES[themePref]),
+    budget: bud || t('未設定'),
+    rec: meta.recurring.length ? t('{n} 項', { n: meta.recurring.length }) : t('未設定'),
+    cats: t('支出 {a} · 收入 {b}', { a: meta.cats.expense.length, b: meta.cats.income.length }),
+    cur: [meta.baseCur, ...foreign].join(' · '),
+    backup: lb ? t('上次匯出備份：{d}', { d: lb.toLocaleDateString(loc()) }) : t('還沒有匯出過備份'),
+  };
+  const warn = mode === 'local' ? `<div class="notice warn" style="margin-top:6px">${t('目前無法連上雲端，資料只存在這台裝置的瀏覽器。清除瀏覽資料就會消失，請常匯出備份。')}</div>` : '';
+  return `${warn}<nav class="menu card" style="margin-top:6px" aria-label="${t('設定')}">${SET_SECS.map(([k, title]) =>
+    `<button type="button" data-sec="${k}"><span class="mi" style="--c:${SEC_COLORS[k]}">${icon('s_' + k)}</span><span class="mid"><b>${t(title)}</b><small class="${k === 'backup' && stale ? 'exp' : ''}">${esc(sum[k])}</small></span><span class="chev" aria-hidden="true">›</span></button>`).join('')}</nav>`;
+}
+
+const VIEWS = { add: viewAdd, list: viewList, stats: viewStats, accounts: viewAccounts, settings: viewSettings };
+function render(force) {
+  const main = document.getElementById('main');
+  const ae = document.activeElement;
+  if (!force && view !== 'add' && ae && main.contains(ae) && /INPUT|SELECT|TEXTAREA/.test(ae.tagName) && ae.type !== 'file') { needRender = true; return; }
+  if (!force && view === 'add' && main.dataset.v === 'add') { refreshAdd(); setSync(); return; }
+  needRender = false;
+  const st = main.scrollTop;
+  const keep = main.dataset.v === view;
+  main.dataset.v = view;
+  main.innerHTML = VIEWS[view]();
+  if (keep) main.scrollTop = st;
+  for (const b of document.querySelectorAll('#tabs button')) b.setAttribute('aria-current', b.dataset.v === view ? 'page' : 'false');
+  if (view === 'add') updateAmount();
+  setSync();
+}
+function go(v) { const same = v === view; view = v; ui.confirm = null; if (v === 'settings') ui.setSec = null; if (v !== 'add' && form.editId) resetForm(); document.getElementById('main').dataset.v = ''; render(true); if (!same) document.getElementById('main').scrollTop = 0; }
+
+// ---------- export / import ----------
+async function offerFile(name, text) {
+  try {
+    const blob = new Blob([text], { type: name.endsWith('.csv') ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    return true;
+  } catch (e) { console.warn(e); ui.exportText = { name, text }; render(true); return true; }
+}
+async function exportJson() {
+  const data = { app: '隨手記帳', format: 2, exportedAt: new Date().toISOString(), meta, transactions: sortTx(allTx()).reverse() };
+  const ok = await offerFile(`${t('記帳備份')}-${today()}.json`, JSON.stringify(data, null, 1));
+  if (ok) { meta.lastBackup = Date.now(); persist('meta'); if (!ui.exportText) { toast(t('備份已匯出')); render(true); } }
+}
+async function exportCsv() {
+  const q = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const lines = [[t('日期'), t('類型'), t('金額'), t('幣別'), t('匯率'), t('換算{b}', { b: meta.baseCur }), t('分類'), t('帳戶'), t('轉入帳戶'), t('轉入金額'), t('備註'), t('標籤')].map(q).join(',')];
+  for (const x of sortTx(allTx()).reverse()) lines.push([x.date, typeName(x.type), x.amount, x.cur || meta.baseCur, x.rate || 1, val(x), x.cat ? catName(x.type, x.cat) : '', acctName(x.acct), x.to ? acctName(x.to) : '', x.toAmount ?? '', x.note, (x.tags || []).join(' ')].map(q).join(','));
+  const ok = await offerFile(`${t('記帳明細')}-${today()}.csv`, '﻿' + lines.join('\r\n'));
+  if (ok && !ui.exportText) toast(t('明細已匯出'));
+}
+function readImport(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (!d || !Array.isArray(d.transactions)) throw 0;
+      d.transactions = d.transactions.filter(x => x && x.id && x.date && /^\d{4}-\d{2}-\d{2}$/.test(x.date) && ['expense', 'income', 'transfer'].includes(x.type) && Number(x.amount) > 0);
+      ui.importData = d; render(true);
+    } catch { toast(t('這不是隨手記帳的備份檔')); }
+  };
+  r.readAsText(file);
+}
+function doImport() {
+  const d = ui.importData; if (!d || !ready) return;
+  if (d.meta) {
+    const ids = new Set(meta.accounts.map(a => a.id));
+    for (const a of d.meta.accounts || []) if (!ids.has(a.id)) meta.accounts.push({ cur: meta.baseCur, ...a });
+    for (const k of ['expense', 'income']) { const cids = new Set(meta.cats[k].map(c => c.id)); for (const c of d.meta.cats?.[k] || []) if (!cids.has(c.id)) meta.cats[k].push(c); }
+    const rids = new Set(meta.recurring.map(r => r.id)); for (const r of d.meta.recurring || []) if (!rids.has(r.id)) meta.recurring.push(r);
+    for (const [k, v] of Object.entries(d.meta.rates || {})) if (!meta.rates[k]) meta.rates[k] = v;
+    if (!meta.budgets.total && d.meta.budgets?.total) meta.budgets.total = d.meta.budgets.total;
+    for (const [k, v] of Object.entries(d.meta.budgets?.cats || {})) if (!meta.budgets.cats[k]) meta.budgets.cats[k] = v;
+    persist('meta');
+  }
+  const touched = new Set();
+  for (const x of d.transactions) { const ym = x.date.slice(0, 7); (months[ym] ||= {})[x.id] = { ...x, amount: round2(Number(x.amount)) }; touched.add(ym); }
+  for (const ym of touched) persist(ym);
+  ui.importData = null; render(true); toast(t('已匯入 {n} 筆記錄', { n: d.transactions.length }));
+}
+
+// ---------- events ----------
+document.getElementById('tabs').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (b) go(b.dataset.v); });
+document.getElementById('themebtn').addEventListener('click', () => { setTheme(isDark() ? 'light' : 'dark'); if (view === 'settings') render(true); });
+document.getElementById('sync').addEventListener('click', () => { if (failed.size && mode === 'cloud') retryFailed(); });
+const main = document.getElementById('main');
+main.addEventListener('focusout', () => setTimeout(() => { if (needRender) render(); }, 0));
+
+main.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const ds = b.dataset;
+  if (ds.k) { if (ds.k === 'save') saveTx(); else press(ds.k); return; }
+  if (ds.lang) { setLang(ds.lang); return; }
+  if (ds.themeOpt) { setTheme(ds.themeOpt); render(true); return; }
+  if (ds.sec) { ui.setSec = ds.sec; ui.confirm = null; render(true); main.scrollTop = 0; return; }
+  if (ds.t && b.closest('.entry')) { if (form.editId) return; resetForm(ds.t); render(true); return; }
+  if (ds.cat) { form.cat = ds.cat; for (const x of main.querySelectorAll('.cat')) x.setAttribute('aria-pressed', x.dataset.cat === ds.cat); const s = document.getElementById('dyn-bud'); if (s) s.outerHTML = budgetStrip(); updateAmount(); return; }
+  if (ds.tag) {
+    const tags = parseTags(form.note);
+    form.note = tags.includes(ds.tag) ? form.note.replace(new RegExp('\\s*#' + ds.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=\\s|$)', 'g'), '').trim() : (form.note.trim() + ' #' + ds.tag).trim();
+    document.getElementById('f-note').value = form.note; b.setAttribute('aria-pressed', !tags.includes(ds.tag)); return;
+  }
+  if (ds.edit) { const x = months[ds.ym]?.[ds.edit]; if (x) startEdit(x); return; }
+  if (ds.mon) { const k = ds.mon + 'Month'; ui[k] = addMonth(ui[k], Number(ds.d)); render(true); return; }
+  if (ds.st) { ui.statsType = ds.st; render(true); return; }
+  if (ds.catsheet) { openCatSheet(ui.statsType, ds.catsheet, pieRange()); return; }
+  if (ds.pr) {
+    ui.pieRange = ds.pr;
+    if (ds.pr === 'custom' && !ui.pieFrom) { const ym = ui.statsMonth || today().slice(0, 7); ui.pieFrom = ym + '-01'; ui.pieTo = today() < ym + '-01' ? ym + '-' + pad2(daysIn(ym)) : today(); }
+    render(true); return;
+  }
+  if (ds.tagq) { ui.q = '#' + ds.tagq; go('list'); return; }
+  if (ds.ct) { ui.catType = ds.ct; ui.confirm = null; render(true); return; }
+  if (ds.rt) { ui.recType = ds.rt; render(true); return; }
+  if (ds.acctOpen) { ui.openAcct = ui.openAcct === ds.acctOpen ? null : ds.acctOpen; ui.confirm = null; render(true); return; }
+  if (ds.acctSave) {
+    const a = findAcct(ds.acctSave); const name = document.getElementById('a-name').value.trim();
+    if (!name) { toast(t('帳戶名稱不能空白')); return; }
+    if (name !== nameOf(a)) a.name = name;
+    a.type = document.getElementById('a-type').value; a.init = round2(Number(document.getElementById('a-init').value) || 0);
+    const cs = document.getElementById('a-cur'); if (!cs.disabled) a.cur = cs.value;
+    ui.openAcct = null; persist('meta'); render(true); toast(t('帳戶已更新')); return;
+  }
+  if (ds.acctMove) { move(meta.accounts, ds.acctMove, Number(ds.d)); persist('meta'); render(true); return; }
+  if (ds.acctList) { ui.q = acctName(ds.acctList); go('list'); return; }
+  if (ds.acctDel) {
+    if (ui.confirm !== 'acct:' + ds.acctDel) { ui.confirm = 'acct:' + ds.acctDel; render(true); return; }
+    meta.accounts = meta.accounts.filter(a => a.id !== ds.acctDel); ui.confirm = null; ui.openAcct = null; persist('meta'); render(true); toast(t('帳戶已刪除')); return;
+  }
+  if (ds.catColor) { const c = findCat(ui.catType, ds.catColor); c.c = (c.c + 1) % PALETTE.length; persist('meta'); render(true); return; }
+  if (ds.catMove) { move(meta.cats[ui.catType], ds.catMove, Number(ds.d)); persist('meta'); render(true); return; }
+  if (ds.catDel) {
+    if (ui.confirm !== 'cat:' + ds.catDel) { ui.confirm = 'cat:' + ds.catDel; render(true); return; }
+    if (meta.cats[ui.catType].length <= 1) { toast(t('至少要保留一個分類')); return; }
+    meta.cats[ui.catType] = meta.cats[ui.catType].filter(c => c.id !== ds.catDel); ui.confirm = null; persist('meta'); render(true); toast(t('分類已刪除')); return;
+  }
+  if (ds.recToggle) {
+    const r = meta.recurring.find(x => x.id === ds.recToggle); r.active = !r.active;
+    if (r.active) { while (r.next < today()) r.next = advance(r, r.next); }   // resuming does not back-fill the paused period
+    persist('meta'); render(true); toast(r.active ? t('已恢復，下次 {d}', { d: r.next }) : t('已暫停')); return;
+  }
+  if (ds.recDel) {
+    if (ui.confirm !== 'rec:' + ds.recDel) { ui.confirm = 'rec:' + ds.recDel; render(true); return; }
+    meta.recurring = meta.recurring.filter(x => x.id !== ds.recDel); ui.confirm = null; persist('meta'); render(true); toast(t('已刪除週期帳目，過去記入的記錄保留')); return;
+  }
+  switch (ds.act) {
+    case 'del': if (!form.delArm) { form.delArm = true; b.textContent = t('確定刪除'); } else deleteEditing(); break;
+    case 'cancel-edit': resetForm(); go('list'); break;
+    case 'make-rec': makeRecurringFromForm(); break;
+    case 'edit-cats': { const ct = form.type === 'income' ? 'income' : 'expense'; go('settings'); ui.catType = ct; ui.setSec = 'cats'; render(true); break; }
+    case 'to-stats': ui.statsMonth = ui.listMonth; go('stats'); break;
+    case 'logout':
+      if (ui.confirm !== 'logout') { ui.confirm = 'logout'; render(true); return; }
+      signOut(); break;
+    case 'set-back': ui.setSec = null; ui.confirm = null; render(true); main.scrollTop = 0; break;
+    case 'acct-add': {
+      const name = document.getElementById('a-new').value.trim(); if (!name) { toast(t('輸入帳戶名稱')); return; }
+      const cur = document.getElementById('a-new-cur').value;
+      meta.accounts.push({ id: 'a' + newId(), name, type: document.getElementById('a-new-type').value, init: 0, cur }); persist('meta'); render(true);
+      toast(cur !== meta.baseCur && !rateOf(cur) ? t('已新增「{n}」，記得到設定填 {c} 匯率', { n: name, c: cur }) : t('已新增帳戶「{n}」', { n: name })); break;
+    }
+    case 'cat-add': {
+      const name = document.getElementById('c-new').value.trim(); if (!name) { toast(t('輸入分類名稱')); return; }
+      meta.cats[ui.catType].push({ id: 'c' + newId(), name, c: meta.cats[ui.catType].length % PALETTE.length }); persist('meta'); render(true); toast(t('已新增分類「{n}」', { n: name })); break;
+    }
+    case 'rec-add': {
+      const amt = round2(Number(document.getElementById('r-amt').value));
+      if (!(amt > 0)) { toast(t('輸入金額')); document.getElementById('r-amt').focus(); return; }
+      const start = document.getElementById('r-start').value || today();
+      const noteRaw = document.getElementById('r-note').value;
+      const r = { id: newId(), type: ui.recType, amount: amt, acct: document.getElementById('r-acct').value, freq: document.getElementById('r-freq').value, start, next: start, active: true, note: stripTags(noteRaw), tags: parseTags(noteRaw) };
+      if (r.type === 'transfer') {
+        r.to = document.getElementById('r-to').value;
+        if (r.to === r.acct) { toast(t('轉出和轉入要選不同帳戶')); return; }
+        if (acctCur(r.to) !== acctCur(r.acct)) { const rf = rateOf(acctCur(r.acct)), rt2 = rateOf(acctCur(r.to)); if (!rf || !rt2) { toast(t('跨幣別轉帳請先填好兩邊的匯率')); return; } r.toAmount = round2(amt * rf / rt2); }
+      } else r.cat = document.getElementById('r-cat').value;
+      if (acctCur(r.acct) !== meta.baseCur && !rateOf(acctCur(r.acct))) { toast(t('請先在下方填 {c} 匯率', { c: acctCur(r.acct) })); return; }
+      meta.recurring.push(r); persist('meta'); render(true); runRecurring();
+      toast(t('已新增：{f}，{x}', { f: freqText(r), x: r.next > today() ? t('下次 {d}', { d: r.next }) : t('已補記到期的帳目') })); break;
+    }
+    case 'export-json': exportJson(); break;
+    case 'export-csv': exportCsv(); break;
+    case 'copy-export': {
+      const ta = document.getElementById('exp-text');
+      const fallback = () => { ta.focus(); ta.select(); toast(t('已全選，請按複製')); };
+      try { navigator.clipboard.writeText(ui.exportText.text).then(() => toast(t('已複製')), fallback); } catch { fallback(); }
+      break;
+    }
+    case 'close-export': ui.exportText = null; render(true); break;
+    case 'import-go': doImport(); break;
+    case 'import-cancel': ui.importData = null; render(true); break;
+  }
+});
+function move(arr, id, d) { const i = arr.findIndex(x => x.id === id); const j = i + d; if (i < 0 || j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; }
+
+main.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'f-note') {
+    form.note = el.value; const tags = parseTags(form.note);
+    for (const c of main.querySelectorAll('.chip[data-tag]')) c.setAttribute('aria-pressed', tags.includes(c.dataset.tag));
+  }
+  else if (el.id === 'f-rate') { form.rate = el.value; updateAmount(); }
+  else if (el.id === 'f-toamt') { form.toAmt = el.value; }
+  else if (el.id === 'f-q') { ui.q = el.value; const pos = el.selectionStart; render(true); const n = document.getElementById('f-q'); n.focus(); try { n.setSelectionRange(pos, pos); } catch {} }
+});
+main.addEventListener('change', e => {
+  const el = e.target;
+  if (el.id === 'f-acct') { form.acct = el.value; form.rate = ''; refreshAdd(); }
+  else if (el.id === 'f-date') form.date = el.value || today();
+  else if (el.id === 'p-from' || el.id === 'p-to') { if (el.value) { ui[el.id === 'p-from' ? 'pieFrom' : 'pieTo'] = el.value; render(true); } }
+  else if (el.id === 'f-from') { form.acct = el.value; form.rate = ''; form.toAmt = ''; if (form.to === form.acct) form.to = meta.accounts.find(a => a.id !== form.acct)?.id; refreshAdd(); }
+  else if (el.id === 'f-to') { form.to = el.value; form.toAmt = ''; refreshAdd(); }
+  else if (el.dataset.catName) {
+    const c = findCat(ui.catType, el.dataset.catName); const v = el.value.trim();
+    if (c && v && v !== nameOf(c)) { c.name = v; persist('meta'); needRender = true; } else el.value = c ? nameOf(c) : '';
+  }
+  else if (el.dataset.bud) {
+    const v = Math.max(0, round2(Number(el.value) || 0));
+    if (el.dataset.bud === '__total') meta.budgets.total = v;
+    else if (v) meta.budgets.cats[el.dataset.bud] = v; else delete meta.budgets.cats[el.dataset.bud];
+    persist('meta'); needRender = true;
+  }
+  else if (el.dataset.rate) {
+    const v = Number(el.value); if (v > 0) meta.rates[el.dataset.rate] = v; else delete meta.rates[el.dataset.rate];
+    persist('meta'); needRender = true;
+  }
+  else if (el.id === 's-base') {
+    if (allTx().length) return;
+    meta.baseCur = el.value;
+    for (const a of meta.accounts) a.cur = el.value;
+    persist('meta'); needRender = true;
+  }
+  else if (el.id === 'f-import' && el.files[0]) readImport(el.files[0]);
+});
+main.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'f-note') { e.preventDefault(); saveTx(); }
+  if (e.key === 'Enter' && e.target.id === 'a-new') { e.preventDefault(); main.querySelector('[data-act="acct-add"]').click(); }
+  if (e.key === 'Enter' && e.target.id === 'c-new') { e.preventDefault(); main.querySelector('[data-act="cat-add"]').click(); }
+  if (e.key === 'Enter' && e.target.matches('[data-bud],[data-rate]')) { e.preventDefault(); e.target.blur(); }
+});
+document.addEventListener('keydown', e => {
+  if (view !== 'add' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) return;
+  const k = e.key;
+  if (/^[0-9.+-]$/.test(k)) { e.preventDefault(); press(k); }
+  else if (k === 'Backspace') { e.preventDefault(); press('back'); }
+  else if (k === 'Enter') { e.preventDefault(); saveTx(); }
+});
+// Catch up recurring entries when the page is left open past midnight.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ready) { runRecurring(); refreshFromServer(); } });
+
+renderChrome();
+resetForm('expense');
+initAuth();
+})();
+</script>
+</body>
+</html>
